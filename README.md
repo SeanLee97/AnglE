@@ -2,8 +2,7 @@
 
 > It is Angle 📐, not Angel 👼.
 
-<h2 align='center'>🔥 A New SOTA Model for Semantic Textual Similarity! 
-</h2>
+🔥 **A New SOTA** for Semantic Textual Similarity! 
 
 <a href="https://arxiv.org/abs/2309.12871">
     <img src="https://img.shields.io/badge/Arxiv-2306.06843-yellow.svg?style=flat-square" alt="https://arxiv.org/abs/2309.12871" />
@@ -19,7 +18,7 @@
 
 
 <details>
-<summary align='center'>📊 Click to show main results of AnglE</summary>
+<summary>📊 Click to show main results of AnglE</summary>
 <p align='center'>
 <img src='assets/angle-results.png'>
 </p>
@@ -27,7 +26,7 @@
 
 ## 🤗 Pretrained Models
 
-| HF | Avg. |
+| 🤗 HF | Avg. |
 |----|------|
 | [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027/tree/main) |   0.8590   |
 
