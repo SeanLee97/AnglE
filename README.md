@@ -1,4 +1,4 @@
-# [AnglE📐: Angle-Optimized Text Embeddings](https://arxiv.org/abs/2309.12871)
+# [AnglE📐: Angle-optimized Text Embeddings](https://arxiv.org/abs/2309.12871)
 
 > It is Angle 📐, not Angel 👼.
 
