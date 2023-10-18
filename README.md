@@ -102,3 +102,25 @@ Coming soon!
 ## Train Custom AnglE Model
 
 The training interface is still messy, we are working on making it better. Currently you can modify `train_angle.py` to train your own models.
+
+
+### Installation
+
+#### 1. Prepare your gpu environment
+
+#### 2. Install python dependencies via `python -m pip install -r requirements.txt`
+
+#### 3. Download data
+
+Download multi_nli + snli:
+
+```bash
+$ cd data
+$ sh download_data.sh
+```
+Download sts datasets
+
+```bash
+$ cd SentEval/data/downstream
+$ bash download_dataset.sh
+```

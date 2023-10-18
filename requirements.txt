@@ -1,0 +1,6 @@
+bitsandbytes
+boltons
+datasets
+peft
+prettytable
+transformers==4.32.1
