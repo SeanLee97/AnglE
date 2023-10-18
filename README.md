@@ -20,7 +20,9 @@
 
 <details>
 <summary align='center'>📊 Click to show main results of AnglE</summary>
-<img src='assets/angle-results.png' width=500>
+<p align='center'>
+<img src='assets/angle-results.png'>
+</p>
 </details>
 
 ## 🤗 Pretrained Models
