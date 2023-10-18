@@ -3,10 +3,11 @@
 > It is Angle 📐, not Angel 👼.
 
 <h2 align='center'>🔥 A New SOTA Model for Semantic Textual Similarity! 
+</h2>
+
 <a href="https://arxiv.org/abs/2309.12871">
     <img src="https://img.shields.io/badge/Arxiv-2306.06843-yellow.svg?style=flat-square" alt="https://arxiv.org/abs/2309.12871" />
 </a>
-</h2>
 
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/angle-optimized-text-embeddings/semantic-textual-similarity-on-sick-r-1)](https://paperswithcode.com/sota/semantic-textual-similarity-on-sick-r-1?p=angle-optimized-text-embeddings)
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/angle-optimized-text-embeddings/semantic-textual-similarity-on-sts16)](https://paperswithcode.com/sota/semantic-textual-similarity-on-sts16?p=angle-optimized-text-embeddings)
@@ -18,7 +19,7 @@
 
 
 <details>
-<summary>📊 Click to show main results of AnglE</summary>
+<summary align='center'>📊 Click to show main results of AnglE</summary>
 <img src='assets/angle-results.png' width=500>
 </details>
 
@@ -29,7 +30,7 @@
 | [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027/tree/main) |   0.8590   |
 
 
-<small>💬 The model above was trained using BERT's hyperparameters. However, Angle-LLaMA is currently actively searching for even better hyperparameters. We plan to release more advanced pre-trained models that will further enhance performance.  Stay tuned ;)😉 </small>
+> <small>💬 The model above was trained using BERT's hyperparameters. However, Angle-LLaMA is currently actively searching for even better hyperparameters. We plan to release more advanced pre-trained models that will further enhance performance.  Stay tuned ;)😉 </small>
 
 
 **📝 Training Details:**
