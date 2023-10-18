@@ -108,7 +108,11 @@ The training interface is still messy, we are working on making it better. Curre
 
 #### 1. Prepare your gpu environment
 
-#### 2. Install python dependencies via `python -m pip install -r requirements.txt`
+#### 2. Install python dependencies
+
+```bash
+python -m pip install -r requirements.txt
+```
 
 #### 3. Download data
 
