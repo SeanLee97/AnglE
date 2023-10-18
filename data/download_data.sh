@@ -1,0 +1,1 @@
+wget https://sbert.net/datasets/AllNLI.tsv.gz
