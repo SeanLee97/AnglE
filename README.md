@@ -32,7 +32,7 @@
 | [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027/tree/main) |   0.8590   |
 
 
-> <small>💬 The model above was trained using BERT's hyperparameters. However, Angle-LLaMA is currently actively searching for even better hyperparameters. We plan to release more advanced pre-trained models that will further enhance performance.  Stay tuned ;)😉 </small>
+> <small>💬 The model above was trained using BERT's hyperparameters. Currently, We are working on searching for even better hyperparameters for Angle-LLaMA. We plan to release more advanced pre-trained models that will further enhance performance. Stay tuned ;)😉 </small>
 
 
 **📝 Training Details:**
