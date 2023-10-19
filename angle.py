@@ -333,13 +333,13 @@ class AngleDataCollator:
 
 
 class Pooler:
-    def __init__(self, model: PreTrainedModel, pooling_strategy: Optional[str] = None, is_llama: bool = False):
+    def __init__(self, model: PreTrainedModel, pooling_strategy: Optional[str] = None, is_llm: bool = False):
         self.model = model
         self.pooling_strategy = pooling_strategy
-        self.is_llama = is_llama
+        self.is_llm = is_llm
     
     def __call__(self, inputs) -> Any:
-        if self.is_llama:
+        if self.is_llm:
             hidden_states = self.model(output_hidden_states=True, return_dict=True, **inputs).hidden_states[-1]
             batch_size = hidden_states.shape[0]
             if self.model.config.pad_token_id is None and batch_size != 1:
@@ -403,6 +403,7 @@ class AnglE:
                  apply_lora: bool = False,
                  train_mode: bool = True,
                  load_kbit: Optional[int] = None,
+                 pretrained_lora_weight: Optional[str] = None,
                  **kwargs: Any):
         super().__init__()
         self.max_length = max_length
@@ -410,7 +411,7 @@ class AnglE:
         self.pooling_strategy = pooling_strategy
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.apply_lora = apply_lora
-        self.is_llama = 'llama' in model_name_or_path.lower()
+        self.is_llm = 'llama' in model_name_or_path.lower()
         self.gpu_count = torch.cuda.device_count()
 
         lora_config = None
@@ -426,8 +427,9 @@ class AnglE:
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         model_kwargs = model_kwargs if model_kwargs is not None else {}
-        if self.is_llama:
-            assert apply_lora, 'llama only support lora finetuning'
+        if self.is_llm:
+            assert self.apply_lora, 'llama only support lora finetuning'
+        if self.apply_lora:
             lora_config['bias'] = "none"
             lora_config['task_type'] = TaskType.CAUSAL_LM
 
@@ -468,11 +470,21 @@ class AnglE:
                 )
                 if train_mode:
                     model = prepare_model_for_kbit_training(model)
-                    target_modules = find_all_linear_names(model)
-                    lora_config['target_modules'] = target_modules
-                    print(f'lora target modules={target_modules}')
-                    peft_config = LoraConfig(**lora_config)
-                    model = get_peft_model(model, peft_config)
+                    if pretrained_lora_weight is not None:
+                        logger.info(f'load lora weight from {pretrained_lora_weight}')
+                        model = PeftModel.from_pretrained(
+                            model,
+                            pretrained_lora_weight,
+                            torch_dtype=torch.float32,
+                            device_map=device_map,
+                            is_trainable=True
+                        )
+                    else:
+                        target_modules = find_all_linear_names(model)
+                        lora_config['target_modules'] = target_modules
+                        print(f'lora target modules={target_modules}')
+                        peft_config = LoraConfig(**lora_config)
+                        model = get_peft_model(model, peft_config)
                     model = AnglE.kbit_post_handle(model)
                     model.print_trainable_parameters()
                 self.backbone = model
@@ -486,25 +498,41 @@ class AnglE:
                     )
                     if load_kbit == 8:
                         model = prepare_model_for_int8_training(model)
-                    peft_config = LoraConfig(**lora_config)
-                    model = get_peft_model(model, peft_config)
+                    if pretrained_lora_weight is not None:
+                        logger.info(f'load lora weight from {pretrained_lora_weight}')
+                        model = PeftModel.from_pretrained(
+                            model,
+                            pretrained_lora_weight,
+                            torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
+                            device_map=device_map,
+                            is_trainable=True
+                        )
+                    else:
+                        peft_config = LoraConfig(**lora_config)
+                        model = get_peft_model(model, peft_config)
                     model.print_trainable_parameters()
                 else:
-                     print('>>>>> default load')
-                     model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
-                                                                  device_map=device_map,
-                                                                  output_hidden_states=True,
-                                                                  trust_remote_code=True,
-                                                                  load_in_8bit=load_kbit==8).bfloat16()
+                    model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
+                                                                 device_map=device_map,
+                                                                 output_hidden_states=True,
+                                                                 trust_remote_code=True,
+                                                                 load_in_8bit=load_kbit==8).bfloat16()
+                    if pretrained_lora_weight is not None:
+                        logger.info(f'load lora weight from {pretrained_lora_weight}')
+                        model = PeftModel.from_pretrained(
+                            model,
+                            pretrained_lora_weight,
+                            torch_dtype=torch.float16,
+                            device_map=device_map,
+                            is_trainable=True
+                        )
+
                 self.backbone = model
         else:
             self.backbone = AutoModel.from_pretrained(model_name_or_path)
-            if apply_lora:
-                peft_config = LoraConfig(**lora_config)
-                self.backbone = get_peft_model(self.backbone, peft_config)
-                self.backbone.print_trainable_parameters()
+
         self.backbone.config.use_cache = False
-        self.pooler = Pooler(self.backbone, pooling_strategy=self.pooling_strategy, is_llama=self.is_llama)
+        self.pooler = Pooler(self.backbone, pooling_strategy=self.pooling_strategy, is_llm=self.is_llm)
 
         self.__cfg = {
             'model_name_or_path': model_name_or_path,
@@ -560,7 +588,7 @@ class AnglE:
             config.update(model_kwargs)
         angle = AnglE(**config, train_mode=train_mode)
         if angle.apply_lora:
-            if angle.is_llama:
+            if angle.is_llm:
                 load_kwargs['torch_dtype'] = torch.float16
             angle.backbone = PeftModel.from_pretrained(
                 angle.backbone,
@@ -607,7 +635,7 @@ class AnglE:
 
         if self.gpu_count > 1:
             gradient_accumulation_steps = gradient_accumulation_steps // self.gpu_count
-        if fp16 is None and self.is_llama:
+        if fp16 is None and self.is_llm:
             fp16 = True
         else:
             fp16 = False

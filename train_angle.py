@@ -18,6 +18,7 @@ from angle import AnglE, AngleDataTokenizer, l2_normalize
 parser = argparse.ArgumentParser()
 parser.add_argument('--mode', type=str, default='train', help='Specify mode from [`train`], default `train`, `eval`')
 parser.add_argument('--task', type=str, default='STS-B', help='Specify task from [`NLI-STS`, `STS-B`]')
+parser.add_argument('--pretrained_lora_weight', type=str, default=None, help='Specify pretrained_lora_weight, default None')
 parser.add_argument('--save_dir', type=str, default=None, help='Specify save dir, default None')
 parser.add_argument('--seed', type=int, default=42, help='Specify random seed, default 42')
 parser.add_argument('--load_kbit', type=int, default=None, choices=[4, 8, 16], help='Specify load_kbit, default None')
@@ -251,6 +252,7 @@ if args.mode == 'train':
                           'lora_dropout': args.lora_dropout,
                           'target_modules': ['q_proj', 'v_proj']},
                       train_mode=True,
+                      pretrained_lora_weight=args.pretrained_lora_weight,
                       load_kbit=args.load_kbit)
     else:
         model = AnglE(args.model_name,
