@@ -122,13 +122,13 @@ python -m pip install -r requirements.txt
 
 3) Download data
 
-Download multi_nli + snli:
+- Download multi_nli + snli:
 
 ```bash
 $ cd data
 $ sh download_data.sh
 ```
-Download sts datasets
+- Download sts datasets
 
 ```bash
 $ cd SentEval/data/downstream
