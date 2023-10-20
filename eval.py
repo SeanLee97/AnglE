@@ -10,8 +10,7 @@ import fcntl
 import time
 import argparse
 from prettytable import PrettyTable
-from transformers import LlamaTokenizer
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModel, AutoTokenizer, AutoModelForCausalLM
 
 # Set up logger
 logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
@@ -72,33 +71,40 @@ def main():
 
     parser.add_argument('--avg', action='store_true')
     parser.add_argument('--lora_weight', type=str, default=None)
+    parser.add_argument('--pretrained_model_path', type=str, default=None)
     parser.add_argument('--checkpoint_path', type=str, default=None)
 
 
     args = parser.parse_args()
     print('>>> prompt:', args.prompt)
-    if args.load_kbit == 4:
-        from transformers import BitsAndBytesConfig
-        model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path,
-            load_in_4bit=True,
-            quantization_config=BitsAndBytesConfig(
+
+    is_llm = 'llama' in args.model_name_or_path.lower()
+
+    if is_llm:
+        if args.load_kbit == 4:
+            from transformers import BitsAndBytesConfig
+            model = AutoModelForCausalLM.from_pretrained(
+                args.model_name_or_path,
                 load_in_4bit=True,
-                llm_int8_threshold=6.0,
-                llm_int8_has_fp16_weight=False,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type='nf4',
-            ),
-            torch_dtype=torch.float16,
-            device_map='auto',
-        )
+                quantization_config=BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    llm_int8_threshold=6.0,
+                    llm_int8_has_fp16_weight=False,
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type='nf4',
+                ),
+                torch_dtype=torch.float16,
+                device_map='auto',
+            )
+        else:
+            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path,
+                                                        device_map='auto',
+                                                        output_hidden_states=True,
+                                                        trust_remote_code=True,
+                                                        load_in_8bit=args.load_kbit == 8,)
     else:
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path,
-                                                     device_map='auto',
-                                                     output_hidden_states=True,
-                                                     trust_remote_code=True,
-                                                     load_in_8bit=args.load_kbit == 8,)
+        model = AutoModel.from_pretrained(args.pretrained_model_path or args.model_name_or_path).cuda()
 
     if args.lora_weight is not None:
         from peft import PeftModel
@@ -124,21 +130,10 @@ def main():
                         else:
                             module = module.to(torch.float16)
 
-    if 'llama' in args.model_name_or_path:
-        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, use_fast=True)
-        tokenizer.bos_token_id = 1
-        tokenizer.eos_token = '</s>'
-    else:
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
-
-    tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
-    tokenizer.padding_side = "left"  # Allow batched inference
-
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Set up the tasks
-    #args.tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16', 'STSBenchmark', 'SICKRelatedness']
-    #args.tasks = ['MR']
     if args.task_set == 'sts':
         args.tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16', 'STSBenchmark', 'SICKRelatedness']
         if args.mode == 'dev':
@@ -177,11 +172,12 @@ def main():
             sentences = [tokenizer.decode(tokenizer.encode(s, add_special_tokens=False)[:max_length]) for s in sentences]
             max_length = 512
 
-        for i, s in enumerate(sentences):
-            if len(s) > 0 and s[-1] not in '.?"\'': s += '.'
-            s = s.replace('"', '\'')
-            if len(s) > 0 and '?' == s[-1]: s = s[:-1] + '.'
-            sentences[i] = args.prompt.format(text=s)
+        if args.prompt is not None:
+            for i, s in enumerate(sentences):
+                if len(s) > 0 and s[-1] not in '.?"\'': s += '.'
+                s = s.replace('"', '\'')
+                if len(s) > 0 and '?' == s[-1]: s = s[:-1] + '.'
+                sentences[i] = args.prompt.format(text=s)
 
         batch = tokenizer.batch_encode_plus(
             sentences,

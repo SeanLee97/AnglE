@@ -26,9 +26,9 @@
 
 ## 🤗 Pretrained Models
 
-| 🤗 HF | Avg. |
-|----|------|
-| [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027/tree/main) |   0.8590   |
+| 🤗 HF | Backbone | LLM | Language |
+|----|------|------|------|
+| [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027/tree/main) |  NousResearch/Llama-2-7b-hf | Y | EN |
 
 
 > <small>💬 The model above was trained using BERT's hyperparameters. Currently, We are working on searching for even better hyperparameters for Angle-LLaMA. We plan to release more advanced pre-trained models that will further enhance performance. Stay tuned ;)😉 </small>
@@ -90,30 +90,37 @@ print(vec)
 
 2) using AnglE
 
-Coming soon!
+Install AnglE first
 
+```bash
+python pip install -U angle-emb
+```
 
-### Angle-BERTs
+```python
+from angle_emb import AnglE
 
-Coming soon!
-
+angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf', pretrained_lora_path='SeanLee97/angle-llama-7b-nli-20231027')
+angle.set_prompt()
+print('prompt:', angle.prompt)
+vec = angle.encode({'text': 'hello world'}, to_numpy=True)
+print(vec)
+vecs = angle.encode([{'text': 'hello world1'}, {'text': 'hello world2'}], to_numpy=True)
+print(vecs)
+```
 
 ## Train Custom AnglE Model
 
-The training interface is still messy, we are working on making it better. Currently you can modify `train_angle.py` to train your own models.
+### 1. Train NLI
 
+#### 1) Prepare your gpu environment
 
-### Installation
-
-#### 1. Prepare your gpu environment
-
-#### 2. Install python dependencies
+#### 2) Install python dependencies
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-#### 3. Download data
+#### 3) Download data
 
 Download multi_nli + snli:
 
@@ -126,4 +133,36 @@ Download sts datasets
 ```bash
 $ cd SentEval/data/downstream
 $ bash download_dataset.sh
+```
+
+### 2. Train w/ `train_angle.py`
+The training interface is still messy, we are working on making it better. Currently you can modify `train_angle.py` to train your own models.
+
+### 3. Custom Train
+
+Coming soon!
+
+
+# Citation
+
+You are welcome to use our code and pre-trained models. If you use our code and pre-trained models, please support us by citing our work as follows:
+
+```bibtex
+@article{li2023angle,
+  title={AnglE-Optimized Text Embeddings},
+  author={Li, Xianming and Li, Jing},
+  journal={arXiv preprint arXiv:2309.12871},
+  year={2023}
+}
+```
+
+When using our pre-trained LLM-based models and using `xxx in one word:` prompt, it is recommended to cite the following work in addition to the above citation:
+
+```bibtex
+@article{jiang2023scaling,
+  title={Scaling Sentence Embeddings with Large Language Models},
+  author={Jiang, Ting and Huang, Shaohan and Luan, Zhongzhi and Wang, Deqing and Zhuang, Fuzhen},
+  journal={arXiv preprint arXiv:2307.16645},
+  year={2023}
+}
 ```
