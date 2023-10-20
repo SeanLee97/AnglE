@@ -5,7 +5,8 @@ import re
 import sys
 import json
 import logging
-from typing import Any, Dict, Optional, List, Union, Tuple, Iterator
+from functools import partial
+from typing import Any, Dict, Optional, List, Union, Tuple, Iterator, Callable
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -15,11 +16,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 from boltons.iterutils import chunked_iter
 from datasets import Dataset
 from transformers import (
     AutoModelForCausalLM, AutoModel, AutoTokenizer,
-    PreTrainedModel, Trainer, TrainingArguments
+    PreTrainedModel, Trainer, TrainingArguments,
+    TrainerCallback
 )
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import PaddingStrategy
@@ -392,6 +395,26 @@ class AngleTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
 
+class EvaluateCallback(TrainerCallback):
+    def __init__(self, model: PreTrainedModel, valid_ds: Dataset, evaluate_fn: Callable, save_dir: Optional[str] = None):
+        super().__init__()
+        self.model = model
+        self.valid_ds = valid_ds
+        self.evaluate_fn = evaluate_fn
+        self.save_dir = save_dir
+        self.best_corrcoef = 0
+    
+    def on_epoch_end(self, args, state, control, **kwargs):
+        corrcoef, accuracy = self.evaluate_fn(self.valid_ds)
+        if corrcoef > self.best_corrcoef:
+            self.best_corrcoef = corrcoef
+            print('new best corrcoef!')
+            if self.save_dir is not None:
+                self.model.save_pretrained(self.save_dir)
+                print(f'save to {self.save_dir}')
+        print(f'corrcoef: {corrcoef}, accuracy: {accuracy}, best corrcoef: {self.best_corrcoef}')
+
+
 class AnglE:
     cfg_file_name = 'angle.config'
     llm_patterns = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*']
@@ -661,11 +684,19 @@ class AnglE:
             argument_kwargs = {}
         if trainer_kwargs is None:
             trainer_kwargs = {}
+        evaluate_callback = None
+        if valid_ds is not None:
+            best_ckpt_dir = None
+            if output_dir is not None:
+                best_ckpt_dir = os.path.join(output_dir, 'best-checkpoint')
+            evaluate_callback = EvaluateCallback(self.backbone, valid_ds,
+                                                 partial(self.evaluate, batch_size=batch_size, device=self.device),
+                                                 save_dir=best_ckpt_dir)
         trainer = AngleTrainer(
             pooler=self.pooler,
             model=self.backbone,
             train_dataset=train_ds,
-            eval_dataset=valid_ds,
+            eval_dataset=None,
             loss_kwargs=loss_kwargs,
             tokenizer=self.tokenizer,
             args=TrainingArguments(
@@ -686,6 +717,7 @@ class AnglE:
                 label_names=['labels', 'seperate_ids', 'similar_matrix'],
                 **argument_kwargs,
             ),
+            callbacks=[evaluate_callback],
             data_collator=AngleDataCollator(
                 self.tokenizer, return_tensors="pt", max_length=self.max_length, compute_similar_matrix=compute_similar_matrix
             ),
@@ -707,7 +739,7 @@ class AnglE:
         )
         y_trues, y_preds = [], []
         # for X, y in data.make_iter(random=False):
-        for features in chunked_iter(data, batch_size):
+        for features in tqdm(chunked_iter(data, batch_size), desc='Evaluate'):
             X = data_collator(features)
             X.pop('similar_matrix', None)
             y = X.pop('labels', None)
