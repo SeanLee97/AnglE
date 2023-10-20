@@ -57,6 +57,8 @@ def main():
     parser.add_argument("--tokenizer_name", type=str, default='')
     parser.add_argument("--model_name_or_path", type=str,
                         help="Transformers' model name or path")
+    parser.add_argument("--max_length", type=int, default=512,
+                        help="max length")
     parser.add_argument("--mode", type=str,
                         choices=['dev', 'test', 'fasttest'],
                         default='test',
@@ -135,7 +137,7 @@ def main():
                 if len(s) > 0 and '?' == s[-1]: s = s[:-1] + '.'
                 sentences[i] = {'text': s}
 
-        return model.encode(sentences, to_numpy=True)
+        return model.encode(sentences, to_numpy=True, max_length=args.max_length)
 
     results = {}
     for task in args.tasks:
