@@ -341,7 +341,7 @@ class Pooler:
         self.model = model
         self.pooling_strategy = pooling_strategy
         self.is_llm = is_llm
-    
+
     def __call__(self, inputs) -> Any:
         if self.is_llm:
             hidden_states = self.model(output_hidden_states=True, return_dict=True, **inputs).hidden_states[-1]
@@ -403,7 +403,7 @@ class EvaluateCallback(TrainerCallback):
         self.evaluate_fn = evaluate_fn
         self.save_dir = save_dir
         self.best_corrcoef = 0
-    
+
     def on_epoch_end(self, args, state, control, **kwargs):
         corrcoef, accuracy = self.evaluate_fn(self.valid_ds)
         if corrcoef > self.best_corrcoef:
@@ -454,7 +454,7 @@ class AnglE:
         self.prompt = None
         if self.is_llm:
             logger.info('LLM detected, automatically set prompt. '
-                         'You can change this setting by manually configuring the `set_prompt()` function.')
+                        'You can change this setting by manually configuring the `set_prompt()` function.')
             self.set_prompt()
 
         lora_config = None
@@ -490,7 +490,7 @@ class AnglE:
                             names = name.split('.')
                             lora_module_names.add(names[0] if len(names) == 1 else names[-1])
 
-                    if 'lm_head' in lora_module_names: # needed for 16-bit
+                    if 'lm_head' in lora_module_names:
                         lora_module_names.remove('lm_head')
                     return list(lora_module_names)
 
@@ -533,7 +533,7 @@ class AnglE:
                 if train_mode:
                     model = AutoModelForCausalLM.from_pretrained(
                         model_name_or_path,
-                        load_in_8bit=load_kbit == 8 ,
+                        load_in_8bit=load_kbit == 8,
                         torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
                         device_map=device_map,
                     )
@@ -557,7 +557,7 @@ class AnglE:
                                                                  device_map=device_map,
                                                                  output_hidden_states=True,
                                                                  trust_remote_code=True,
-                                                                 load_in_8bit=load_kbit==8,
+                                                                 load_in_8bit=load_kbit == 8,
                                                                  torch_dtype=torch.float16)
                     if pretrained_lora_path is not None:
                         print(f'>>> load lora weight from {pretrained_lora_path}')
