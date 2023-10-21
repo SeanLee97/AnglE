@@ -5,7 +5,8 @@ import re
 import sys
 import json
 import logging
-from typing import Any, Dict, Optional, List, Union, Tuple, Iterator
+from functools import partial
+from typing import Any, Dict, Optional, List, Union, Tuple, Iterator, Callable
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -15,11 +16,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 from boltons.iterutils import chunked_iter
 from datasets import Dataset
 from transformers import (
     AutoModelForCausalLM, AutoModel, AutoTokenizer,
-    PreTrainedModel, Trainer, TrainingArguments
+    PreTrainedModel, Trainer, TrainingArguments,
+    TrainerCallback
 )
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import PaddingStrategy
@@ -41,6 +44,7 @@ def categorical_crossentropy(y_true: torch.Tensor, y_pred: torch.Tensor, from_lo
 
 
 def cosine_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 20.0):
+    # modified from: https://github.com/bojone/CoSENT/blob/124c368efc8a4b179469be99cb6e62e1f2949d39/cosent.py#L79
     y_true = y_true[::2, 0]
     y_true = (y_true[:, None] < y_true[None, :]).float()
     y_pred = F.normalize(y_pred, p=2, dim=1)
@@ -337,7 +341,7 @@ class Pooler:
         self.model = model
         self.pooling_strategy = pooling_strategy
         self.is_llm = is_llm
-    
+
     def __call__(self, inputs) -> Any:
         if self.is_llm:
             hidden_states = self.model(output_hidden_states=True, return_dict=True, **inputs).hidden_states[-1]
@@ -391,8 +395,29 @@ class AngleTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
 
+class EvaluateCallback(TrainerCallback):
+    def __init__(self, model: PreTrainedModel, valid_ds: Dataset, evaluate_fn: Callable, save_dir: Optional[str] = None):
+        super().__init__()
+        self.model = model
+        self.valid_ds = valid_ds
+        self.evaluate_fn = evaluate_fn
+        self.save_dir = save_dir
+        self.best_corrcoef = 0
+
+    def on_epoch_end(self, args, state, control, **kwargs):
+        corrcoef, accuracy = self.evaluate_fn(self.valid_ds)
+        if corrcoef > self.best_corrcoef:
+            self.best_corrcoef = corrcoef
+            print('new best corrcoef!')
+            if self.save_dir is not None:
+                self.model.save_pretrained(self.save_dir)
+                print(f'save to {self.save_dir}')
+        print(f'corrcoef: {corrcoef}, accuracy: {accuracy}, best corrcoef: {self.best_corrcoef}')
+
+
 class AnglE:
     cfg_file_name = 'angle.config'
+    llm_patterns = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*']
 
     def __init__(self,
                  model_name_or_path: str,
@@ -400,22 +425,40 @@ class AnglE:
                  model_kwargs: Optional[Dict] = None,
                  lora_config_kwargs: Optional[Dict] = None,
                  pooling_strategy: Optional[str] = None,
-                 apply_lora: bool = False,
+                 apply_lora: Optional[bool] = None,
                  train_mode: bool = True,
                  load_kbit: Optional[int] = None,
-                 pretrained_lora_weight: Optional[str] = None,
+                 is_llm: Optional[bool] = None,
+                 pretrained_model_path: Optional[str] = None,
+                 pretrained_lora_path: Optional[str] = None,
                  **kwargs: Any):
         super().__init__()
         self.max_length = max_length
         self.train_mode = train_mode
         self.pooling_strategy = pooling_strategy
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.load_kbit = load_kbit
+        if is_llm is None:
+            self.is_llm = self.check_llm(model_name_or_path)
+            if self.is_llm:
+                logger.info('LLM detected, automatically set is_llm=True. If it is wrong, you can manually set `is_llm`.')
         self.apply_lora = apply_lora
-        self.is_llm = 'llama' in model_name_or_path.lower()
+        if self.apply_lora is None:
+            self.apply_lora = self.is_llm
+            if self.is_llm:
+                logger.info('LLM detected, automatically set apply_lora=True. If it is wrong, you can manually set `apply_lora`.')
+            else:
+                self.apply_lora = False
+
         self.gpu_count = torch.cuda.device_count()
+        self.prompt = None
+        if self.is_llm:
+            logger.info('LLM detected, automatically set prompt. '
+                        'You can change this setting by manually configuring the `set_prompt()` function.')
+            self.set_prompt()
 
         lora_config = None
-        if apply_lora:
+        if self.apply_lora:
             lora_config = {
                 'task_type': TaskType.FEATURE_EXTRACTION,
                 'r': 32,
@@ -427,8 +470,6 @@ class AnglE:
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         model_kwargs = model_kwargs if model_kwargs is not None else {}
-        if self.is_llm:
-            assert self.apply_lora, 'llama only support lora finetuning'
         if self.apply_lora:
             lora_config['bias'] = "none"
             lora_config['task_type'] = TaskType.CAUSAL_LM
@@ -449,7 +490,7 @@ class AnglE:
                             names = name.split('.')
                             lora_module_names.add(names[0] if len(names) == 1 else names[-1])
 
-                    if 'lm_head' in lora_module_names: # needed for 16-bit
+                    if 'lm_head' in lora_module_names:
                         lora_module_names.remove('lm_head')
                     return list(lora_module_names)
 
@@ -470,11 +511,11 @@ class AnglE:
                 )
                 if train_mode:
                     model = prepare_model_for_kbit_training(model)
-                    if pretrained_lora_weight is not None:
-                        logger.info(f'load lora weight from {pretrained_lora_weight}')
+                    if pretrained_lora_path is not None:
+                        print(f'>>> load lora weight from {pretrained_lora_path}')
                         model = PeftModel.from_pretrained(
                             model,
-                            pretrained_lora_weight,
+                            pretrained_lora_path,
                             torch_dtype=torch.float32,
                             device_map=device_map,
                             is_trainable=True
@@ -492,17 +533,17 @@ class AnglE:
                 if train_mode:
                     model = AutoModelForCausalLM.from_pretrained(
                         model_name_or_path,
-                        load_in_8bit=load_kbit == 8 ,
+                        load_in_8bit=load_kbit == 8,
                         torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
                         device_map=device_map,
                     )
                     if load_kbit == 8:
                         model = prepare_model_for_int8_training(model)
-                    if pretrained_lora_weight is not None:
-                        logger.info(f'load lora weight from {pretrained_lora_weight}')
+                    if pretrained_lora_path is not None:
+                        print(f'>>> load lora weight from {pretrained_lora_path}')
                         model = PeftModel.from_pretrained(
                             model,
-                            pretrained_lora_weight,
+                            pretrained_lora_path,
                             torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
                             device_map=device_map,
                             is_trainable=True
@@ -516,12 +557,13 @@ class AnglE:
                                                                  device_map=device_map,
                                                                  output_hidden_states=True,
                                                                  trust_remote_code=True,
-                                                                 load_in_8bit=load_kbit==8).bfloat16()
-                    if pretrained_lora_weight is not None:
-                        logger.info(f'load lora weight from {pretrained_lora_weight}')
+                                                                 load_in_8bit=load_kbit == 8,
+                                                                 torch_dtype=torch.float16)
+                    if pretrained_lora_path is not None:
+                        print(f'>>> load lora weight from {pretrained_lora_path}')
                         model = PeftModel.from_pretrained(
                             model,
-                            pretrained_lora_weight,
+                            pretrained_lora_path,
                             torch_dtype=torch.float16,
                             device_map=device_map,
                             is_trainable=True
@@ -529,7 +571,7 @@ class AnglE:
 
                 self.backbone = model
         else:
-            self.backbone = AutoModel.from_pretrained(model_name_or_path)
+            self.backbone = AutoModel.from_pretrained(pretrained_model_path or model_name_or_path)
 
         self.backbone.config.use_cache = False
         self.pooler = Pooler(self.backbone, pooling_strategy=self.pooling_strategy, is_llm=self.is_llm)
@@ -545,8 +587,16 @@ class AnglE:
         self.__cfg.update(kwargs)
 
     def cuda(self):
-        self.backbone = self.backbone.cuda()
+        if self.load_kbit is None:
+            self.backbone = self.backbone.cuda()
         return self
+
+    def check_llm(self, model_name_or_path: str) -> bool:
+        model_name_or_path = model_name_or_path.lower()
+        for pattern in AnglE.llm_patterns:
+            if re.match(pattern, model_name_or_path):
+                return True
+        return False
 
     @staticmethod
     def kbit_post_handle(model: nn.Module) -> nn.Module:
@@ -575,28 +625,19 @@ class AnglE:
 
     @staticmethod
     def from_pretrained(model_name_or_path: str,
+                        pretrained_model_path: Optional[str] = None,
+                        pretrained_lora_path: Optional[str] = None,
+                        is_llm: Optional[bool] = None,
+                        pooling_strategy: str = 'cls',
                         train_mode: bool = False,
-                        model_kwargs: Optional[Dict] = None, 
-                        load_kwargs: Optional[Dict] = None,
-                        ):
-        if not os.path.exists(model_name_or_path):
-            raise ValueError(f'model {model_name_or_path} not found!')
-
-        load_kwargs = {} if load_kwargs is None else load_kwargs
-        config = AnglE.load_config(os.path.join(model_name_or_path, AnglE.cfg_file_name))
-        if model_kwargs is not None:
-            config.update(model_kwargs)
-        angle = AnglE(**config, train_mode=train_mode)
-        if angle.apply_lora:
-            if angle.is_llm:
-                load_kwargs['torch_dtype'] = torch.float16
-            angle.backbone = PeftModel.from_pretrained(
-                angle.backbone,
-                model_name_or_path,
-                device_map={'': 0},
-            )
-            if model_kwargs is not None and model_kwargs.get('load_kbit') == 4:
-                angle.backbone = AnglE.kbit_post_handle(angle.backbone)
+                        **kwargs):
+        angle = AnglE(model_name_or_path,
+                      is_llm=is_llm,
+                      pretrained_model_path=pretrained_model_path,
+                      pretrained_lora_path=pretrained_lora_path,
+                      pooling_strategy=pooling_strategy,
+                      train_mode=train_mode,
+                      **kwargs)
         return angle
 
     @staticmethod
@@ -643,11 +684,19 @@ class AnglE:
             argument_kwargs = {}
         if trainer_kwargs is None:
             trainer_kwargs = {}
+        evaluate_callback = None
+        if valid_ds is not None:
+            best_ckpt_dir = None
+            if output_dir is not None:
+                best_ckpt_dir = os.path.join(output_dir, 'best-checkpoint')
+            evaluate_callback = EvaluateCallback(self.backbone, valid_ds,
+                                                 partial(self.evaluate, batch_size=batch_size, device=self.device),
+                                                 save_dir=best_ckpt_dir)
         trainer = AngleTrainer(
             pooler=self.pooler,
             model=self.backbone,
             train_dataset=train_ds,
-            eval_dataset=valid_ds,
+            eval_dataset=None,
             loss_kwargs=loss_kwargs,
             tokenizer=self.tokenizer,
             args=TrainingArguments(
@@ -668,6 +717,7 @@ class AnglE:
                 label_names=['labels', 'seperate_ids', 'similar_matrix'],
                 **argument_kwargs,
             ),
+            callbacks=[evaluate_callback],
             data_collator=AngleDataCollator(
                 self.tokenizer, return_tensors="pt", max_length=self.max_length, compute_similar_matrix=compute_similar_matrix
             ),
@@ -689,7 +739,7 @@ class AnglE:
         )
         y_trues, y_preds = [], []
         # for X, y in data.make_iter(random=False):
-        for features in chunked_iter(data, batch_size):
+        for features in tqdm(chunked_iter(data, batch_size), desc='Evaluate'):
             X = data_collator(features)
             X.pop('similar_matrix', None)
             y = X.pop('labels', None)
@@ -709,16 +759,33 @@ class AnglE:
             accuracy = np.mean((y_trues > 0.5) == (y_preds > threshold))
         return corrcoef, accuracy
 
-    def encode(self, sentences: Union[List[str], Tuple[str], str], device: Any = None):
+    def set_prompt(self, prompt: str = 'Summarize sentence "{text}" in one word:"'):
+        self.prompt = prompt
+        if self.prompt is not None:
+            logger.info('Prompt is set, the prompt will be automatically applied during the encoding phase. '
+                        'To disable prompt setting, please configure set_prompt(prompt=None)')
+
+    def encode(self,
+               inputs: Union[List[str], Tuple[str], List[Dict], str],
+               max_length: Optional[int] = None,
+               to_numpy: bool = True,
+               device: Any = None):
         if device is None:
             device = self.device
         self.backbone.eval()
-        if isinstance(sentences, str):
-            sentences = [sentences]
-        tok = self.tokenizer(sentences, padding='longest', max_length=self.max_length, truncation=True, return_tensors='pt')
+        if not isinstance(inputs, (tuple, list)):
+            inputs = [inputs]
+        if self.prompt is not None:
+            for i, obj in enumerate(inputs):
+                assert isinstance(obj, dict), 'The prompt has been set, please pass a dict like {"prompt_key": "text"}'
+                inputs[i] = self.prompt.format(**obj)
+        tok = self.tokenizer(inputs, padding='longest', max_length=max_length or self.max_length, truncation=True, return_tensors='pt')
         tok.to(device)
         with torch.no_grad():
-            return self.pooler(tok)
+            output = self.pooler(tok)
+        if to_numpy:
+            return output.float().detach().cpu().numpy()
+        return output
 
     def export_onnx(self):
         pass

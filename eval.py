@@ -10,8 +10,8 @@ import fcntl
 import time
 import argparse
 from prettytable import PrettyTable
-from transformers import LlamaTokenizer
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModel, AutoTokenizer, AutoModelForCausalLM
+from angle_emb import AnglE
 
 # Set up logger
 logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
@@ -57,6 +57,8 @@ def main():
     parser.add_argument("--tokenizer_name", type=str, default='')
     parser.add_argument("--model_name_or_path", type=str,
                         help="Transformers' model name or path")
+    parser.add_argument("--max_length", type=int, default=512,
+                        help="max length")
     parser.add_argument("--mode", type=str,
                         choices=['dev', 'test', 'fasttest'],
                         default='test',
@@ -72,73 +74,24 @@ def main():
 
     parser.add_argument('--avg', action='store_true')
     parser.add_argument('--lora_weight', type=str, default=None)
+    parser.add_argument('--pretrained_model_path', type=str, default=None)
     parser.add_argument('--checkpoint_path', type=str, default=None)
 
 
     args = parser.parse_args()
+
+    is_llm = 'llama' in args.model_name_or_path.lower()
+    if is_llm:
+        model = AnglE.from_pretrained(args.model_name_or_path, pretrained_lora_path=args.lora_weight, load_kbit=args.load_kbit)
+    else:
+        args.prompt = None
+        model = AnglE.from_pretrained(args.model_name_or_path, pretrained_model_path=args.pretrained_model_path).cuda()
     print('>>> prompt:', args.prompt)
-    if args.load_kbit == 4:
-        from transformers import BitsAndBytesConfig
-        model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path,
-            load_in_4bit=True,
-            quantization_config=BitsAndBytesConfig(
-                load_in_4bit=True,
-                llm_int8_threshold=6.0,
-                llm_int8_has_fp16_weight=False,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type='nf4',
-            ),
-            torch_dtype=torch.float16,
-            device_map='auto',
-        )
-    else:
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path,
-                                                     device_map='auto',
-                                                     output_hidden_states=True,
-                                                     trust_remote_code=True,
-                                                     load_in_8bit=args.load_kbit == 8,)
 
-    if args.lora_weight is not None:
-        from peft import PeftModel
-        model = PeftModel.from_pretrained(
-            model,
-            args.lora_weight,
-            torch_dtype=torch.float16,
-            device_map={'': 0},
-        )
-        if args.load_kbit == 4:
-            from peft.tuners.lora import LoraLayer
-            for name, module in model.named_modules():
-                if isinstance(module, LoraLayer):
-                    #module = module.to(torch.bfloat16)
-                    module = module.to(torch.float16)
-                if 'norm' in name:
-                    module = module.to(torch.float32)
-                if 'lm_head' in name or 'embed_tokens' in name:
-                    if hasattr(module, 'weight'):
-                        #module = module.to(torch.bfloat16)
-                        if 'opt' in args.model_name_or_path:
-                            module = module.to(torch.float32)
-                        else:
-                            module = module.to(torch.float16)
-
-    if 'llama' in args.model_name_or_path:
-        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path, use_fast=True)
-        tokenizer.bos_token_id = 1
-        tokenizer.eos_token = '</s>'
-    else:
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
-
-    tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
-    tokenizer.padding_side = "left"  # Allow batched inference
-
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Set up the tasks
-    #args.tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16', 'STSBenchmark', 'SICKRelatedness']
-    #args.tasks = ['MR']
     if args.task_set == 'sts':
         args.tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16', 'STSBenchmark', 'SICKRelatedness']
         if args.mode == 'dev':
@@ -177,55 +130,14 @@ def main():
             sentences = [tokenizer.decode(tokenizer.encode(s, add_special_tokens=False)[:max_length]) for s in sentences]
             max_length = 512
 
-        for i, s in enumerate(sentences):
-            if len(s) > 0 and s[-1] not in '.?"\'': s += '.'
-            s = s.replace('"', '\'')
-            if len(s) > 0 and '?' == s[-1]: s = s[:-1] + '.'
-            sentences[i] = args.prompt.format(text=s)
+        if args.prompt is not None:
+            for i, s in enumerate(sentences):
+                if len(s) > 0 and s[-1] not in '.?"\'': s += '.'
+                s = s.replace('"', '\'')
+                if len(s) > 0 and '?' == s[-1]: s = s[:-1] + '.'
+                sentences[i] = {'text': s}
 
-        batch = tokenizer.batch_encode_plus(
-            sentences,
-            return_tensors='pt',
-            padding=True,
-            max_length=max_length,
-            truncation=max_length is not None
-        )
-
-        # Move to the correct device
-        for k in batch:
-            batch[k] = batch[k].to(device) if batch[k] is not None else None
-
-        # Get raw embeddings
-        with torch.no_grad():
-            hidden_states = model(output_hidden_states=True, return_dict=True, **batch).hidden_states
-
-            if args.avg:
-                last_layer = hidden_states[-1]
-                attention_mask = batch['attention_mask'].unsqueeze(-1).expand(last_layer.shape)
-                outputs = (last_layer * attention_mask).mean(1)
-            else:
-                hidden_states = hidden_states[-1]
-                batch_size = hidden_states.shape[0]
-                if model.config.pad_token_id is None and batch_size != 1:
-                    raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-                if model.config.pad_token_id is None:
-                    sequence_lengths = -1
-                else:
-                    if batch['input_ids'] is not None:
-                        sequence_lengths = (torch.eq(batch['input_ids'], model.config.pad_token_id).long().argmax(-1) - 1).to(
-                            hidden_states.device
-                        )
-                    else:
-                        sequence_lengths = -1
-
-                outputs = hidden_states[torch.arange(batch_size, device=hidden_states.device), sequence_lengths]
-                # outputs = hidden_states[-1][:, -1, :]
-
-            if outputs.dtype == torch.bfloat16:
-                # bfloat16 not support for .numpy()
-                outputs = outputs.float()
-
-            return outputs.cpu()
+        return model.encode(sentences, to_numpy=True, max_length=args.max_length)
 
     results = {}
     for task in args.tasks:
