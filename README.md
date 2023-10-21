@@ -28,7 +28,7 @@
 
 | 🤗 HF | Backbone | LLM | Language | Use Prompt | Avg Score. |
 |----|------|------|------|------|------|
-| [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | 85.96 |
+| [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | **85.96** |
 | [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027/tree/main) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | 85.90 |
 
 
