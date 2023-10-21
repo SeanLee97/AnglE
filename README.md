@@ -26,9 +26,11 @@
 
 ## 🤗 Pretrained Models
 
-| 🤗 HF | Backbone | LLM | Language | Use Prompt|
-|----|------|------|------|------|
-| [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027/tree/main) |  NousResearch/Llama-2-7b-hf | Y | EN | Y |
+| 🤗 HF | Backbone | LLM | Language | Use Prompt | Avg Score. |
+|----|------|------|------|------|------|
+| [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | 85.96 |
+| [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027/tree/main) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | 85.90 |
+
 
 
 > <small>💬 The model above was trained using BERT's hyperparameters. Currently, We are working on searching for even better hyperparameters for Angle-LLaMA. We plan to release more advanced pre-trained models that will further enhance performance. Stay tuned ;)😉 </small>
@@ -59,6 +61,15 @@ CUDA_VISIBLE_DEVICES=0,1 python eval.py \
 ```
 
 </details>
+
+## Results
+
+### English STS Results
+
+| Model | STS12 | STS13 | STS14 | STS15 | STS16 | STSBenchmark | SICKRelatedness |  Avg. |
+| ------- |-------|-------|-------|-------|-------|--------------|-----------------|-------|
+| [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027) | 78.68 | 90.58 | 85.49 | 89.56 | 86.91 |    88.92     |      81.18      | 85.90 |
+| [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) | 79.00 | 90.56 | 85.79 | 89.43 | 87.00 |    88.97     |      80.94      | **85.96** |
 
 
 ## Usage
