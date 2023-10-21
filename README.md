@@ -90,7 +90,7 @@ CUDA_VISIBLE_DEVICES=0,1 python eval.py \
 Install AnglE first
 
 ```bash
-python pip install -U angle-emb
+python -m pip install -U angle-emb
 ```
 
 ```python
