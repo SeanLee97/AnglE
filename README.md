@@ -76,13 +76,33 @@ CUDA_VISIBLE_DEVICES=0,1 python eval.py \
 
 ### Angle-LLaMA
 
-1) transformers
+1) AnglE
+
+Install AnglE first
+
+```bash
+python pip install -U angle-emb
+```
+
+```python
+from angle_emb import AnglE
+
+angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf', pretrained_lora_path='SeanLee97/angle-llama-7b-nli-v2')
+angle.set_prompt()
+print('prompt:', angle.prompt)
+vec = angle.encode({'text': 'hello world'}, to_numpy=True)
+print(vec)
+vecs = angle.encode([{'text': 'hello world1'}, {'text': 'hello world2'}], to_numpy=True)
+print(vecs)
+```
+
+2) transformers
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel, PeftConfig
 
-peft_model_id = 'SeanLee97/angle-llama-7b-nli-20231027'
+peft_model_id = 'SeanLee97/angle-llama-7b-nli-v2'
 config = PeftConfig.from_pretrained(peft_model_id)
 tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path)
 model = AutoModelForCausalLM.from_pretrained(config.base_model_name_or_path).bfloat16().cuda()
@@ -97,26 +117,6 @@ for k, v in tok.items():
     tok[k] = v.cuda()
 vec = model(output_hidden_states=True, **tok).hidden_states[-1][:, -1].float().detach().cpu().numpy()
 print(vec)
-```
-
-2) AnglE
-
-Install AnglE first
-
-```bash
-python pip install -U angle-emb
-```
-
-```python
-from angle_emb import AnglE
-
-angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf', pretrained_lora_path='SeanLee97/angle-llama-7b-nli-20231027')
-angle.set_prompt()
-print('prompt:', angle.prompt)
-vec = angle.encode({'text': 'hello world'}, to_numpy=True)
-print(vec)
-vecs = angle.encode([{'text': 'hello world1'}, {'text': 'hello world2'}], to_numpy=True)
-print(vecs)
 ```
 
 ## Train Custom AnglE Model

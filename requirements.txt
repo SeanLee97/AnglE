@@ -3,4 +3,4 @@ boltons
 datasets
 peft
 prettytable
-transformers==4.32.1
+transformers>=4.32.1
