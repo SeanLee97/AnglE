@@ -183,6 +183,7 @@ train_data, valid_data, test_data = None, None, None
 to_dataset = True
 if args.task == 'NLI-STS':
     train_data, test_data = load_nli_data()
+    valid_data = test_data
     print('train size:', len(train_data))
     print('test size:', len(test_data))
 elif args.task == 'ZHNLI':
