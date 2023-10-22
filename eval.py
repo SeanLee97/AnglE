@@ -55,6 +55,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--prompt', type=str, default='Summarize sentence "{text}" in one word:"')
     parser.add_argument("--tokenizer_name", type=str, default='')
+    parser.add_argument("--pooling_strategy", type=str, default='cls')
     parser.add_argument("--model_name_or_path", type=str,
                         help="Transformers' model name or path")
     parser.add_argument("--max_length", type=int, default=512,
@@ -85,7 +86,7 @@ def main():
         model = AnglE.from_pretrained(args.model_name_or_path, pretrained_lora_path=args.lora_weight, load_kbit=args.load_kbit)
     else:
         args.prompt = None
-        model = AnglE.from_pretrained(args.model_name_or_path, pretrained_model_path=args.pretrained_model_path).cuda()
+        model = AnglE.from_pretrained(args.model_name_or_path, pretrained_model_path=args.pretrained_model_path, pooling_strategy=args.pooling_strategy).cuda()
     print('>>> prompt:', args.prompt)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
