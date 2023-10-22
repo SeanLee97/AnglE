@@ -36,7 +36,7 @@
 ## 🤗 Pretrained Models
 
 | 🤗 HF | Backbone | LLM | Language | Use Prompt | Datasets | Pooling Strategy | Avg Score. |
-|----|------|------|------|------|------|------|
+|----|------|------|------|------|------|------|------|
 | [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | multi_nli + snli | last token | **85.96** |
 | [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | multi_nli + snli | last token | 85.90 |
 | [SeanLee97/angle-bert-base-uncased-nli-en-v1](https://huggingface.co/SeanLee97/angle-bert-base-uncased-nli-en-v1) |  bert-base-uncased | N | EN | N | multi_nli + snli | `cls_avg` | 82.37 |
