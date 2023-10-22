@@ -35,11 +35,11 @@
 
 ## 🤗 Pretrained Models
 
-| 🤗 HF | Backbone | LLM | Language | Use Prompt | Datasets| Avg Score. |
+| 🤗 HF | Backbone | LLM | Language | Use Prompt | Datasets | Pooling Strategy | Avg Score. |
 |----|------|------|------|------|------|------|
-| [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | multi_nli + snli | **85.96** |
-| [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027/tree/main) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | multi_nli + snli | 85.90 |
-
+| [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | multi_nli + snli | last token | **85.96** |
+| [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | multi_nli + snli | last token | 85.90 |
+| [SeanLee97/angle-bert-base-uncased-nli-en-v1](https://huggingface.co/SeanLee97/angle-bert-base-uncased-nli-en-v1) |  bert-base-uncased | N | EN | N | multi_nli + snli | `cls_avg` | 82.37 |
 
 
 > <small>💬 The model above was trained using BERT's hyperparameters. Currently, We are working on searching for even better hyperparameters for Angle-LLaMA. We plan to release more advanced pre-trained models that will further enhance performance. Stay tuned ;)😉 </small>
@@ -83,16 +83,15 @@ CUDA_VISIBLE_DEVICES=0,1 python eval.py \
 
 ## Usage
 
-### Angle-LLaMA
-
-1) AnglE
-
-Install AnglE first
+AnglE supports two APIs, one is the `transformers` API, the other is the `AnglE` API. If you want to use the `AnglE` API, please install AnglE first:
 
 ```bash
 python -m pip install -U angle-emb
 ```
 
+### Angle-LLaMA
+
+1) AnglE
 ```python
 from angle_emb import AnglE
 
@@ -125,6 +124,38 @@ tok = tokenizer([decorate_text(inputs)], return_tensors='pt')
 for k, v in tok.items():
     tok[k] = v.cuda()
 vec = model(output_hidden_states=True, **tok).hidden_states[-1][:, -1].float().detach().cpu().numpy()
+print(vec)
+```
+
+### Angle-BERT
+
+1) AnglE
+```python
+from angle_emb import AnglE
+
+angle = AnglE.from_pretrained('SeanLee97/angle-bert-base-uncased-nli-en-v1', pooling_strategy='cls_avg').cuda()
+vec = angle.encode('hello world', to_numpy=True)
+print(vec)
+vecs = angle.encode(['hello world1', 'hello world2'], to_numpy=True)
+print(vecs)
+```
+
+2) transformers
+
+```python
+import torch
+from transformers import AutoModel, AutoTokenizer
+
+model_id = 'SeanLee97/angle-bert-base-uncased-nli-en-v1'
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModel.from_pretrained(model_id).cuda()
+
+inputs = 'hello world!'
+tok = tokenizer([inputs], return_tensors='pt')
+for k, v in tok.items():
+    tok[k] = v.cuda()
+hidden_state = model(**tok).last_hidden_state
+vec = (hidden_state[:, 0] + torch.mean(hidden_state, dim=1)) / 2.0
 print(vec)
 ```
 
