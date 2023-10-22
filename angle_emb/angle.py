@@ -65,7 +65,7 @@ def angle_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 1.0):
     b = y_pred_im[::2]
     c = y_pred_re[1::2]
     d = y_pred_im[1::2]
-    
+
     # (a+bi) / (c+di)
     # = ((a+bi) * (c-di)) / ((c+di) * (c-di))
     # = ((ac + bd) + i(bc - ad)) / (c^2 + d^2)
@@ -438,6 +438,7 @@ class AnglE:
         self.pooling_strategy = pooling_strategy
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.load_kbit = load_kbit
+        self.is_llm = is_llm
         if is_llm is None:
             self.is_llm = self.check_llm(model_name_or_path)
             if self.is_llm:
@@ -468,7 +469,7 @@ class AnglE:
             if lora_config_kwargs is not None:
                 lora_config.update(lora_config_kwargs)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True)
         model_kwargs = model_kwargs if model_kwargs is not None else {}
         if self.apply_lora:
             lora_config['bias'] = "none"
@@ -508,6 +509,7 @@ class AnglE:
                     ),
                     torch_dtype=torch.float32,
                     device_map=device_map,
+                    trust_remote_code=True,
                 )
                 if train_mode:
                     model = prepare_model_for_kbit_training(model)
@@ -536,6 +538,7 @@ class AnglE:
                         load_in_8bit=load_kbit == 8,
                         torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
                         device_map=device_map,
+                        trust_remote_code=True,
                     )
                     if load_kbit == 8:
                         model = prepare_model_for_int8_training(model)
@@ -571,7 +574,7 @@ class AnglE:
 
                 self.backbone = model
         else:
-            self.backbone = AutoModel.from_pretrained(pretrained_model_path or model_name_or_path)
+            self.backbone = AutoModel.from_pretrained(pretrained_model_path or model_name_or_path, trust_remote_code=True,)
 
         self.backbone.config.use_cache = False
         self.pooler = Pooler(self.backbone, pooling_strategy=self.pooling_strategy, is_llm=self.is_llm)
@@ -684,7 +687,7 @@ class AnglE:
             argument_kwargs = {}
         if trainer_kwargs is None:
             trainer_kwargs = {}
-        evaluate_callback = None
+        callbacks = None
         if valid_ds is not None:
             best_ckpt_dir = None
             if output_dir is not None:
@@ -692,6 +695,7 @@ class AnglE:
             evaluate_callback = EvaluateCallback(self.backbone, valid_ds,
                                                  partial(self.evaluate, batch_size=batch_size, device=self.device),
                                                  save_dir=best_ckpt_dir)
+            callbacks = [evaluate_callback]
         trainer = AngleTrainer(
             pooler=self.pooler,
             model=self.backbone,
@@ -717,7 +721,7 @@ class AnglE:
                 label_names=['labels', 'seperate_ids', 'similar_matrix'],
                 **argument_kwargs,
             ),
-            callbacks=[evaluate_callback],
+            callbacks=callbacks,
             data_collator=AngleDataCollator(
                 self.tokenizer, return_tensors="pt", max_length=self.max_length, compute_similar_matrix=compute_similar_matrix
             ),
