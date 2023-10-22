@@ -91,40 +91,6 @@ def load_data(split_name):
     return data
 
 
-def load_stsb_llm(split_name):
-    def load(fpaths, skip_neg=False):
-        data = []
-        if isinstance(fpaths, str):
-            fpaths = [fpaths]
-        for fpath in fpaths:
-            with open(fpath, 'r') as reader:
-                for line in reader:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    obj = json.loads(line)
-                    if skip_neg and obj['score'] == 0 and len(set(obj['sentence1'].split()) - set(obj['sentence2'].split())) < 5:
-                        continue
-                    data.append({'text1': obj['sentence1'], 'text2': obj['sentence2'], 'label': float(obj['score'])})
-        return data
-
-    if split_name == 'train':
-        if args.task == 'STS-B-ChatGLM':
-            return load('data/llm_supervised_stsb/stsb.chatglm.train.jsonl')
-        elif args.task == 'STS-B-LLaMA':
-            return load('data/llm_supervised_stsb/stsb.llama.train.jsonl')
-        elif args.task == 'STS-B-ChatGPT':
-            return load('data/llm_supervised_stsb/stsb.chatgpt.train.jsonl', skip_neg=True)
-        elif args.task == 'STS-B-ALL':
-            return load([f'data/llm_supervised_stsb/stsb.{n}.train.jsonl' for n in ['chatgpt', 'llama', 'chatglm']], skip_neg=True)
-        else:
-            raise NotImplementedError
-    return [
-        {'text1': obj['sentence1'], 'text2': obj['sentence2'], 'label': float(obj['score'])}
-        for obj in load_dataset('./data/mteb___stsbenchmark-sts')[split_name]
-    ]
-
-
 def load_nli_data(exclude_neutral=True):
     def load_all_nli():
         label_mapping = {
@@ -151,19 +117,19 @@ def load_nli_data(exclude_neutral=True):
                 {'text1': obj['sentence1'],
                  'text2': obj['sentence2'],
                  'label': float(obj['score'])}
-                for obj in load_dataset(f"./data/mteb___sts{i}-sts")['test']
+                for obj in load_dataset(f"mteb/sts{i}-sts")['test']
             ]
         all_sts += [
             {'text1': obj['sentence1'],
              'text2': obj['sentence2'],
              'label': float(obj['score'])}
-            for obj in load_dataset(f"./data/mteb___stsbenchmark-sts")['test']
+            for obj in load_dataset(f"mteb/stsbenchmark-sts")['test']
         ]
         all_sts += [
             {'text1': obj['sentence1'],
              'text2': obj['sentence2'],
              'label': float(obj['score'])}
-            for obj in load_dataset(f"./data/mteb___sickr-sts")['test']
+            for obj in load_dataset(f"mteb/sickr-sts")['test']
         ]
         return all_sts
 
@@ -172,11 +138,20 @@ def load_nli_data(exclude_neutral=True):
 
 def load_zhnli():
     ds = {}
+    all_data = []
     for name in ['ATEC', 'BQ', 'LCQMC', 'PAWSX', 'STS-B']:
-        ds[name] = load_dataset('shibing624/nli_zh', name)
-        ds[name] = ds[name].rename_column("sentence1", "text1")
-        ds[name] = ds[name].rename_column("sentence2", "text2")
-    return DatasetDict(ds)
+        data = load_dataset('shibing624/nli_zh', name)
+        data = data.rename_column("sentence1", "text1")
+        data = data.rename_column("sentence2", "text2")
+        
+        new_data = []
+        for obj in data['test']:
+            # if name == 'STS-B':
+            #    obj['label'] /= 5.
+            new_data.append(obj)
+        all_data += new_data
+        ds[name] = Dataset.from_list(new_data)
+    return DatasetDict(ds), all_data
 
 
 train_data, valid_data, test_data = None, None, None
@@ -187,9 +162,8 @@ if args.task == 'NLI-STS':
     print('train size:', len(train_data))
     print('test size:', len(test_data))
 elif args.task == 'ZHNLI':
-    to_dataset = False
-    dataset = load_dataset('shibing624/nli-zh-all')
-    zh_nli_ds = load_zhnli()
+    train_data = [obj for obj in load_dataset('shibing624/nli-zh-all')['train']]
+    zh_nli_ds, valid_data = load_zhnli()
 else:
     train_data, valid_data, test_data = [
         load_data(split) for split in ['train', 'validation', 'test']
@@ -220,7 +194,7 @@ if to_dataset:
 if args.mode == 'train':
     print('train mode...')
     # build model
-    if 'llama' in args.model_name.lower():
+    if 'llama' in args.model_name.lower() or 'qwen' in args.model_name.lower():
         print('loading llama...')
         model = AnglE(args.model_name,
                       max_length=args.maxlen,
@@ -232,6 +206,7 @@ if args.mode == 'train':
                           'lora_dropout': args.lora_dropout,
                           'target_modules': ['q_proj', 'v_proj']},
                       train_mode=True,
+                      is_llm=True,
                       pretrained_lora_path=args.pretrained_lora_path,
                       pretrained_model_path=args.pretrained_model_path,
                       load_kbit=args.load_kbit)
@@ -293,10 +268,13 @@ elif args.mode == 'test_zhnli':
         load_kbit=args.load_kbit,
         max_length=args.maxlen,
     ).cuda()
+    all_corrcoef = []
     for dataset in ['ATEC', 'BQ', 'LCQMC', 'PAWSX', 'STS-B']:
         print(f'eval {dataset}...')
-        test_ds = zh_nli_ds[dataset]['test'].map(AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=PROMPT), num_proc=args.workers)
+        test_ds = zh_nli_ds[dataset].map(AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=PROMPT), num_proc=args.workers)
         corrcoef, accuracy = model.evaluate(test_ds, batch_size=args.batch_size, device=model.device)
         print(f'{dataset}: corrcoef: {corrcoef}, accuracy: {accuracy}')
+        all_corrcoef.append(corrcoef)
+    print('avg corrcoef:', sum(all_corrcoef)/len(all_corrcoef))
 else:
     raise ValueError(f'not support {args.mode}')
