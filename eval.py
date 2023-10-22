@@ -55,7 +55,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--prompt', type=str, default='Summarize sentence "{text}" in one word:"')
     parser.add_argument("--tokenizer_name", type=str, default='')
-    parser.add_argument("--pooling_strategy", type=str, default='cls')
+    parser.add_argument("--pooling_strategy", type=str, default='cls_avg')
     parser.add_argument("--model_name_or_path", type=str,
                         help="Transformers' model name or path")
     parser.add_argument("--max_length", type=int, default=512,
