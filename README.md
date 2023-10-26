@@ -193,8 +193,56 @@ The training interface is still messy, we are working on making it better. Curre
 
 ### 3. Custom Train
 
-Coming soon!
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1h28jHvv_x-0fZ0tItIMjf8rJGp3GcO5V#scrollTo=ZIChOwnZTMlL)
 
+
+```python
+from datasets import load_dataset
+from angle_emb import AnglE, AngleDataTokenizer
+
+
+# 1. load pretrained model
+angle = AnglE.from_pretrained('SeanLee97/angle-bert-base-uncased-nli-en-v1', max_length=128, pooling_strategy='cls').cuda()
+
+# 2. load dataset
+# `text1`, `text2`, and `label` three columns are required
+ds = load_dataset('mteb/stsbenchmark-sts')
+ds = ds.map(lambda obj: {"text1": str(obj["sentence1"]), "text2": str(obj['sentence2']), "label": obj['score']})
+ds = ds.select_columns(["text1", "text2", "label"])
+
+# 3. transform data
+train_ds = ds['train'].shuffle().map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
+valid_ds = ds['validation'].map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
+test_ds = ds['test'].map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
+
+# 4. fit
+angle.fit(
+    train_ds=train_ds,
+    valid_ds=valid_ds,
+    output_dir='ckpts/sts-b',
+    batch_size=32,
+    epochs=5,
+    learning_rate=2e-5,
+    save_steps=100,
+    eval_steps=1000,
+    warmup_steps=0,
+    gradient_accumulation_steps=1,
+    loss_kwargs={
+        'w1': 1.0,
+        'w2': 1.0,
+        'w3': 1.0,
+        'cosine_tau': 20,
+        'ibn_tau': 20,
+        'angle_tau': 1.0
+    },
+    fp16=True,
+    logging_steps=100
+)
+
+# 5. evaluate
+corrcoef, accuracy = angle.evaluate(test_ds, device=angle.device)
+print('corrcoef:', corrcoef)
+```
 
 # Citation
 
