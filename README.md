@@ -205,7 +205,7 @@ from angle_emb import AnglE, AngleDataTokenizer
 angle = AnglE.from_pretrained('SeanLee97/angle-bert-base-uncased-nli-en-v1', max_length=128, pooling_strategy='cls').cuda()
 
 # 2. load dataset
-# `text1`, `text2`, and `label` three columns are required
+# `text1`, `text2`, and `label` are three required columns.
 ds = load_dataset('mteb/stsbenchmark-sts')
 ds = ds.map(lambda obj: {"text1": str(obj["sentence1"]), "text2": str(obj['sentence2']), "label": obj['score']})
 ds = ds.select_columns(["text1", "text2", "label"])
