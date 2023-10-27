@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-import json
 import gzip
 import csv
 import argparse
@@ -63,13 +62,18 @@ TASK_MAPPING = {
     'QQP': ('SetFit/qqp', ),
     'QNLI': ('SetFit/qnli', ),
     'RTE': ('SetFit/rte', ),
-    'ZHNLI': 'shibing624/nli-zh-all',
+    'ZHNLI_ALL': 'shibing624/nli-zh-all',
+    'ZHNLI': None,
 }
 assert args.task in TASK_MAPPING
 task_name = TASK_MAPPING[args.task]
 
-PROMPT = 'Summarize sentence "{text}" in one word:"' if 'llama' in args.model_name.lower() else None
 
+if args.task.startswith('ZHNLI'):
+    PROMPT = 'You can only output one word. "{text}" can be summarized as:"' if 'llama' in args.model_name.lower() else None
+else:
+    PROMPT = 'Summarize sentence "{text}" in one word:"' if 'llama' in args.model_name.lower() else None
+print('>>> PROMPT:', PROMPT)
 
 def load_data(split_name):
     if args.task in ['MRPC', 'QQP', 'QNLI', 'RTE']:
@@ -146,8 +150,6 @@ def load_zhnli():
         
         new_data = []
         for obj in data['test']:
-            # if name == 'STS-B':
-            #    obj['label'] /= 5.
             new_data.append(obj)
         all_data += new_data
         ds[name] = Dataset.from_list(new_data)
@@ -161,8 +163,27 @@ if args.task == 'NLI-STS':
     valid_data = test_data
     print('train size:', len(train_data))
     print('test size:', len(test_data))
-elif args.task == 'ZHNLI':
+elif args.task == 'ZHNLI_ALL':
     train_data = [obj for obj in load_dataset('shibing624/nli-zh-all')['train']]
+    # check
+    for obj in train_data:
+        assert obj['label'] in [0, 1]
+    zh_nli_ds, valid_data = load_zhnli()
+elif args.task == 'ZHNLI':
+    train_data = []
+    for name in ['PAWSX', 'STS-B', 'LCQMC', 'ATEC', 'BQ']:
+        ds = load_dataset('shibing624/nli_zh', name)
+        ds = ds.rename_column('sentence1', 'text1')
+        ds = ds.rename_column('sentence2', 'text2')
+        if name == 'STS-B':
+            for obj in ds['train']:
+                if obj['label'] == 3:
+                    continue
+                obj['label'] = 1 if obj['label'] > 3 else 0
+                train_data.append(obj)
+        else:
+            train_data.extend([obj for obj in ds['train']])
+    random.shuffle(train_data)
     zh_nli_ds, valid_data = load_zhnli()
 else:
     train_data, valid_data, test_data = [
@@ -215,6 +236,7 @@ if args.mode == 'train':
         model = AnglE(args.model_name,
                       max_length=args.maxlen,
                       apply_lora=False,
+                      pretrained_model_path=args.pretrained_model_path,
                       pooling_strategy=args.pooling_strategy,
                       train_mode=True)
     
@@ -263,13 +285,13 @@ elif args.mode == 'test_zhnli':
     model = AnglE.from_pretrained(
         args.model_name,
         pretrained_model_path=args.save_dir,
-        pretrained_lora_path=args.pretrained_lora_path,
+        pretrained_lora_path=args.save_dir,
         pooling_strategy=args.pooling_strategy,
         load_kbit=args.load_kbit,
         max_length=args.maxlen,
     ).cuda()
     all_corrcoef = []
-    for dataset in ['ATEC', 'BQ', 'LCQMC', 'PAWSX', 'STS-B']:
+    for dataset in ['PAWSX', 'STS-B', 'LCQMC', 'ATEC', 'BQ']:
         print(f'eval {dataset}...')
         test_ds = zh_nli_ds[dataset].map(AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=PROMPT), num_proc=args.workers)
         corrcoef, accuracy = model.evaluate(test_ds, batch_size=args.batch_size, device=model.device)

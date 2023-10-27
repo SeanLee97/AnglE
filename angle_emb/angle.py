@@ -34,6 +34,7 @@ from peft import (
 from peft.tuners.lora import LoraLayer
 
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('AnglE')
 
 
@@ -145,6 +146,18 @@ def optimal_threshold(y_true, y_pred):
     return np.tanh(result.x), -result.fun
 
 
+class Prompts:
+    A = 'Summarize sentence "{text}" in one word:"'
+    B = 'You can only output one word. Summarize "{text}":"'
+
+    @classmethod
+    def list_prompts(cls):
+        for key, val in Prompts.__dict__.items():
+            if key.startswith('_') or key == 'list_prompts':
+                continue
+            print(f'Prompts.{key}', '=', f"'{val}'")
+
+
 class AngleLoss:
     def __init__(self,
                  w1: float = 1.0,
@@ -180,11 +193,15 @@ class AngleDataTokenizer:
                  tokenizer: PreTrainedTokenizerBase,
                  max_length: Optional[int] = None,
                  prompt_template: Optional[str] = None,
-                 template_placeholders: Optional[List[str]] = ['condition', 'text']):
+                 template_placeholders: Optional[List[str]] = None,
+                 extra_columns: Optional[List[str]] = None):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.prompt_template = prompt_template
         self.prompt_template_tok = None
+        self.extra_columns = extra_columns
+        if template_placeholders is None:
+            template_placeholders = ['condition', 'text']
         if prompt_template is not None:
             re_placeholder = re.compile(r'\{(%s)\}' % '|'.join(template_placeholders))
             self.prompt_template_tok = self.tokenizer(re_placeholder.sub('', prompt_template))
@@ -206,11 +223,12 @@ class AngleDataTokenizer:
     def __call__(self, data: Dict) -> Dict:
         extra_length = 0
         extra_placeholder = {}
-        for key, val in data.items():
-            if key in ['text1', 'text2', 'label']:
-                continue
-            extra_placeholder[key] = val
-            extra_length += len(self.tokenizer(val, add_special_tokens=False)['input_ids'])
+        if self.extra_columns is not None:
+            for key, val in data.items():
+                if key not in self.extra_columns:
+                    continue
+                extra_placeholder[key] = val
+                extra_length += len(self.tokenizer(val, add_special_tokens=False)['input_ids'])
         if self.prompt_template_tok is not None:
             tok1 = self.tokenizer(data['text1'],
                                   max_length=self.max_length - len(self.prompt_template_tok['input_ids']) - extra_length,
@@ -348,15 +366,9 @@ class Pooler:
             batch_size = hidden_states.shape[0]
             if self.model.config.pad_token_id is None and batch_size != 1:
                 raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-            if self.model.config.pad_token_id is None:
-                sequence_lengths = -1
-            else:
-                if inputs['input_ids'] is not None:
-                    sequence_lengths = (torch.eq(inputs['input_ids'], self.model.config.pad_token_id).long().argmax(-1) - 1).to(
-                        hidden_states.device
-                    )
-                else:
-                    sequence_lengths = -1
+            sequence_lengths = (torch.eq(inputs['input_ids'], self.model.config.pad_token_id).long().argmax(-1) - 1).to(
+                hidden_states.device
+            )
 
             outputs = hidden_states[torch.arange(batch_size, device=hidden_states.device), sequence_lengths]
         else:
@@ -431,6 +443,7 @@ class AnglE:
                  is_llm: Optional[bool] = None,
                  pretrained_model_path: Optional[str] = None,
                  pretrained_lora_path: Optional[str] = None,
+                 apply_bfloat16: Optional[bool] = None,
                  **kwargs: Any):
         super().__init__()
         self.max_length = max_length
@@ -457,6 +470,12 @@ class AnglE:
             logger.info('LLM detected, automatically set prompt. '
                         'You can change this setting by manually configuring the `set_prompt()` function.')
             self.set_prompt()
+
+        self.apply_bfloat16 = apply_bfloat16
+        if self.apply_bfloat16 is None and 'llama' in model_name_or_path.lower():
+            logger.info('LLaMA detected, automatically set `apply_bfloat16=True`. '
+                        'You can change this setting by manually configuring the `apply_bfloat16`.')
+            self.apply_bfloat16 = True
 
         lora_config = None
         if self.apply_lora:
@@ -514,18 +533,18 @@ class AnglE:
                 if train_mode:
                     model = prepare_model_for_kbit_training(model)
                     if pretrained_lora_path is not None:
-                        print(f'>>> load lora weight from {pretrained_lora_path}')
+                        logger.info(f'>>> load lora weight from {pretrained_lora_path}')
                         model = PeftModel.from_pretrained(
                             model,
                             pretrained_lora_path,
                             torch_dtype=torch.float32,
                             device_map=device_map,
-                            is_trainable=True
+                            is_trainable=train_mode
                         )
                     else:
                         target_modules = find_all_linear_names(model)
                         lora_config['target_modules'] = target_modules
-                        print(f'lora target modules={target_modules}')
+                        logger.info(f'lora target modules={target_modules}')
                         peft_config = LoraConfig(**lora_config)
                         model = get_peft_model(model, peft_config)
                     model = AnglE.kbit_post_handle(model)
@@ -549,31 +568,38 @@ class AnglE:
                             pretrained_lora_path,
                             torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
                             device_map=device_map,
-                            is_trainable=True
+                            is_trainable=train_mode
                         )
                     else:
                         peft_config = LoraConfig(**lora_config)
                         model = get_peft_model(model, peft_config)
                     model.print_trainable_parameters()
                 else:
-                    model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
-                                                                 device_map=device_map,
-                                                                 output_hidden_states=True,
-                                                                 trust_remote_code=True,
-                                                                 load_in_8bit=load_kbit == 8,
-                                                                 torch_dtype=torch.float16)
+                    if self.apply_bfloat16:
+                        model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
+                                                                     output_hidden_states=True,
+                                                                     trust_remote_code=True).bfloat16().cuda()
+                    else:
+                        model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
+                                                                    device_map=device_map,
+                                                                    output_hidden_states=True,
+                                                                    trust_remote_code=True,
+                                                                    load_in_8bit=load_kbit == 8,
+                                                                    torch_dtype=torch.float16)
                     if pretrained_lora_path is not None:
-                        print(f'>>> load lora weight from {pretrained_lora_path}')
+                        logger.info(f'>>> load lora weight from {pretrained_lora_path}')
                         model = PeftModel.from_pretrained(
                             model,
                             pretrained_lora_path,
                             torch_dtype=torch.float16,
                             device_map=device_map,
-                            is_trainable=True
+                            is_trainable=train_mode
                         )
 
                 self.backbone = model
         else:
+            if pretrained_model_path is not None:
+                logger.info(f'>>> load pretrained model from {pretrained_model_path}')
             self.backbone = AutoModel.from_pretrained(pretrained_model_path or model_name_or_path, trust_remote_code=True,)
 
         self.backbone.config.use_cache = False
@@ -749,7 +775,7 @@ class AnglE:
             y = X.pop('labels', None)
             y_trues.extend(y[::2, 0].detach().cpu().numpy())
             with torch.no_grad():
-                X.to(device)
+                X.to(device or self.device)
                 x_vecs = self.pooler(X).detach().float().cpu().numpy()
             x_vecs = l2_normalize(x_vecs)
             pred = (x_vecs[::2] * x_vecs[1::2]).sum(1)
@@ -763,7 +789,7 @@ class AnglE:
             accuracy = np.mean((y_trues > 0.5) == (y_preds > threshold))
         return corrcoef, accuracy
 
-    def set_prompt(self, prompt: str = 'Summarize sentence "{text}" in one word:"'):
+    def set_prompt(self, prompt: str = Prompts.A):
         self.prompt = prompt
         if self.prompt is not None:
             logger.info('Prompt is set, the prompt will be automatically applied during the encoding phase. '

@@ -10,7 +10,7 @@ import fcntl
 import time
 import argparse
 from prettytable import PrettyTable
-from transformers import AutoModel, AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer
 from angle_emb import AnglE
 
 # Set up logger
