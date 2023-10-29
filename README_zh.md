@@ -72,7 +72,7 @@ AnglE 的评测可参照 [![Open In Colab](https://colab.research.google.com/ass
 | ^CoSENT-bert-base | 49.74 | 72.38 | 78.69 | 60.00 | 79.27 | 68.01 |
 | ^CoSENT-macbert-base | 50.39 | 72.93 | 79.17 | 60.86 | 79.30 | 68.53 |
 | ^CoSENT-roberta-ext | 50.81 | 71.45 | 79.31 | 61.56 | 79.96 | 68.61 |
-| AnglE-roberta-wwm-ext | 51.30 | 73.35 | 79.53 | 62.46 | 80.83 | 69.49 |
+| AnglE-roberta-wwm-ext | **51.30** | **73.35** | **79.53** | **62.46** | **80.83** | **69.49** |
 
 ^ 为 baseline 模型，结果来自：[text2vec](https://github.com/shibing624/text2vec#%E4%B8%AD%E6%96%87%E5%8C%B9%E9%85%8D%E6%95%B0%E6%8D%AE%E9%9B%86%E7%9A%84%E8%AF%84%E6%B5%8B%E7%BB%93%E6%9E%9C)
 
