@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import json
 import gzip
 import csv
 import argparse
@@ -141,18 +142,29 @@ def load_nli_data(exclude_neutral=True):
 
 
 def load_zhnli():
+    def load_sohu(name):
+        data = []
+        with open(f'data/{name}.jsonl', 'r') as reader:
+            for line in reader:
+                data.append(json.loads(line))
+        return Dataset.from_list(data)
+
     ds = {}
     all_data = []
-    for name in ['ATEC', 'BQ', 'LCQMC', 'PAWSX', 'STS-B']:
-        data = load_dataset('shibing624/nli_zh', name)
+    for name in ['sohu-dd', 'sohu-dc', 'ATEC', 'BQ', 'LCQMC', 'PAWSX', 'STS-B']:
+        if name.startswith('sohu-'):
+            data = load_sohu(name)
+        else:
+            data = load_dataset('shibing624/nli_zh', name)['test']
         data = data.rename_column("sentence1", "text1")
         data = data.rename_column("sentence2", "text2")
-        
+
         new_data = []
-        for obj in data['test']:
+        for obj in data:
             new_data.append(obj)
         all_data += new_data
         ds[name] = Dataset.from_list(new_data)
+
     return DatasetDict(ds), all_data
 
 
@@ -291,7 +303,7 @@ elif args.mode == 'test_zhnli':
         max_length=args.maxlen,
     ).cuda()
     all_corrcoef = []
-    for dataset in ['PAWSX', 'STS-B', 'LCQMC', 'ATEC', 'BQ']:
+    for dataset in ['sohu-dc', 'sohu-dd', 'PAWSX', 'STS-B', 'LCQMC', 'ATEC', 'BQ']:
         print(f'eval {dataset}...')
         test_ds = zh_nli_ds[dataset].map(AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=PROMPT), num_proc=args.workers)
         corrcoef, accuracy = model.evaluate(test_ds, batch_size=args.batch_size, device=model.device)
