@@ -1,3 +1,5 @@
+<small>EN | [简体中文](README_zh.md) </small>
+
 # [AnglE📐: Angle-optimized Text Embeddings](https://arxiv.org/abs/2309.12871)
 
 > It is Angle 📐, not Angel 👼.
@@ -35,11 +37,14 @@
 
 ## 🤗 Pretrained Models
 
-| 🤗 HF | Backbone | LLM | Language | Use Prompt | Datasets | Pooling Strategy | Avg Score. |
-|----|------|------|------|------|------|------|------|
-| [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | multi_nli + snli | last token | **85.96** |
-| [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027) |  NousResearch/Llama-2-7b-hf | Y | EN | Y | multi_nli + snli | last token | 85.90 |
-| [SeanLee97/angle-bert-base-uncased-nli-en-v1](https://huggingface.co/SeanLee97/angle-bert-base-uncased-nli-en-v1) |  bert-base-uncased | N | EN | N | multi_nli + snli | `cls_avg` | 82.37 |
+| 🤗 HF | Backbone | LLM | Language | Prompt | Datasets | Pooling Strategy |
+|----|------|------|------|------|------|------|
+| [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) |  NousResearch/Llama-2-7b-hf | Y | EN | `Prompts.A` | multi_nli + snli | last token |
+| [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027) |  NousResearch/Llama-2-7b-hf | Y | EN | `Prompts.A` | multi_nli + snli | last token |
+| [SeanLee97/angle-bert-base-uncased-nli-en-v1](https://huggingface.co/SeanLee97/angle-bert-base-uncased-nli-en-v1) |  bert-base-uncased | N | EN | N | multi_nli + snli | `cls_avg` |
+| [SeanLee97/angle-roberta-wwm-base-zhnli-v1](https://huggingface.co/SeanLee97/angle-roberta-wwm-base-zhnli-v1) |  hfl/chinese-roberta-wwm-ext | N | ZH-CN | N | zh_nli_all | `cls` |
+| [SeanLee97/angle-llama-7b-zhnli-v1](https://huggingface.co/SeanLee97/angle-llama-7b-zhnli-v1) |  NousResearch/Llama-2-7b-hf | Y | ZH-CN | `Prompts.B` | zh_nli_all | last token |
+
 
 
 > <small>💬 The model above was trained using BERT's hyperparameters. Currently, We are working on searching for even better hyperparameters for Angle-LLaMA. We plan to release more advanced pre-trained models that will further enhance performance. Stay tuned ;)😉 </small>
@@ -83,6 +88,18 @@ CUDA_VISIBLE_DEVICES=0,1 python eval.py \
 
 
 
+### Chinese STS Results
+
+| Model | ATEC | BQ	| LCQMC | PAWSX | STS-B | SOHU-dd | SOHU-dc | Avg. |
+| ------- |-------|-------|-------|-------|-------|--------------|-----------------|-------|
+| ^[shibing624/text2vec-bge-large-chinese](https://huggingface.co/shibing624/text2vec-bge-large-chinese) | 38.41 | 61.34 | 71.72 | 35.15 | 76.44 | 71.81 | 63.15 | 59.72 |
+| ^[shibing624/text2vec-base-chinese-paraphrase](https://huggingface.co/shibing624/text2vec-base-chinese-paraphrase) |	44.89 | 63.58 | 74.24 | 40.90 | 78.93 | 76.70 | 63.30 | 63.08 |
+| [SeanLee97/angle-roberta-wwm-base-zhnli-v1](https://huggingface.co/SeanLee97/angle-roberta-wwm-base-zhnli-v1) | 49.49 | 72.47 | 78.33 | 59.13 | 77.14 |    72.36     |      60.53      | **67.06** |
+| [SeanLee97/angle-llama-7b-zhnli-v1](https://huggingface.co/SeanLee97/angle-llama-7b-zhnli-v1) | 50.44 | 71.95 | 78.90 | 56.57 | 81.11 | 68.11 | 52.02 | 65.59 |
+
+^ denotes baselines, results are retrieved from: https://github.com/shibing624/text2vec
+
+
 ## Usage
 
 AnglE supports two APIs, one is the `transformers` API, the other is the `AnglE` API. If you want to use the `AnglE` API, please install AnglE first:
@@ -95,10 +112,12 @@ python -m pip install -U angle-emb
 
 1) AnglE
 ```python
-from angle_emb import AnglE
+from angle_emb import AnglE, Prompts
 
 angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf', pretrained_lora_path='SeanLee97/angle-llama-7b-nli-v2')
-angle.set_prompt()
+
+print('All predefined prompts:', Prompts.list_prompts())
+angle.set_prompt(prompt=Prompts.A)
 print('prompt:', angle.prompt)
 vec = angle.encode({'text': 'hello world'}, to_numpy=True)
 print(vec)
@@ -109,6 +128,7 @@ print(vecs)
 2) transformers
 
 ```python
+from angle_emb import AnglE
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel, PeftConfig
 
@@ -119,7 +139,7 @@ model = AutoModelForCausalLM.from_pretrained(config.base_model_name_or_path).bfl
 model = PeftModel.from_pretrained(model, peft_model_id).cuda()
 
 def decorate_text(text: str):
-    return f'Summarize sentence "{text}" in one word:"'
+    return Prompts.A.format(text=text)
 
 inputs = 'hello world!'
 tok = tokenizer([decorate_text(inputs)], return_tensors='pt')
@@ -193,7 +213,7 @@ The training interface is still messy, we are working on making it better. Curre
 
 ### 3. Custom Train
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1h28jHvv_x-0fZ0tItIMjf8rJGp3GcO5V#scrollTo=ZIChOwnZTMlL)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1h28jHvv_x-0fZ0tItIMjf8rJGp3GcO5V?usp=sharing)
 
 
 ```python
@@ -267,3 +287,9 @@ When using our pre-trained LLM-based models and using `xxx in one word:` prompt,
   year={2023}
 }
 ```
+
+# ChangeLogs
+
+| 📅 | Description |
+|----|------|
+| 2023 Oct 28 |  Release two chinese pretrained models: `SeanLee97/angle-roberta-wwm-base-zhnli-v1` and `SeanLee97/angle-llama-7b-zhnli-v1`; Add chinese README.md |
