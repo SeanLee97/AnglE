@@ -97,7 +97,7 @@ CUDA_VISIBLE_DEVICES=0,1 python eval.py \
 | [SeanLee97/angle-roberta-wwm-base-zhnli-v1](https://huggingface.co/SeanLee97/angle-roberta-wwm-base-zhnli-v1) | 49.49 | 72.47 | 78.33 | 59.13 | 77.14 |    72.36     |      60.53      | **67.06** |
 | [SeanLee97/angle-llama-7b-zhnli-v1](https://huggingface.co/SeanLee97/angle-llama-7b-zhnli-v1) | 50.44 | 71.95 | 78.90 | 56.57 | 81.11 | 68.11 | 52.02 | 65.59 |
 
-^ denotes baselines, results are retrieved from: https://github.com/shibing624/text2vec
+^ denotes baselines, their results are retrieved from: https://github.com/shibing624/text2vec
 
 
 ## Usage
