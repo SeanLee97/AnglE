@@ -4,17 +4,18 @@
 
 import sys
 import os
-import torch
 import logging
+
+# Set up logger
+logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
+
+import torch
 import fcntl
 import time
 import argparse
 from prettytable import PrettyTable
 from transformers import AutoTokenizer
 from angle_emb import AnglE
-
-# Set up logger
-logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
 
 # Import SentEval
 sys.path.insert(0, './SentEval')
