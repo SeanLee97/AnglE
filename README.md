@@ -270,7 +270,7 @@ You are welcome to use our code and pre-trained models. If you use our code and 
 
 ```bibtex
 @article{li2023angle,
-  title={AnglE-Optimized Text Embeddings},
+  title={AnglE-optimized Text Embeddings},
   author={Li, Xianming and Li, Jing},
   journal={arXiv preprint arXiv:2309.12871},
   year={2023}
