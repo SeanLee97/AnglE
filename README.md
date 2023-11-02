@@ -39,15 +39,12 @@
 
 | 🤗 HF | Backbone | LLM | Language | Prompt | Datasets | Pooling Strategy |
 |----|------|------|------|------|------|------|
+| [SeanLee97/angle-llama-13b-nli](https://huggingface.co/SeanLee97/angle-llama-13b-nli) |  NousResearch/Llama-2-13b-hf | Y | EN | `Prompts.A` | multi_nli + snli | last token |
 | [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) |  NousResearch/Llama-2-7b-hf | Y | EN | `Prompts.A` | multi_nli + snli | last token |
 | [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027) |  NousResearch/Llama-2-7b-hf | Y | EN | `Prompts.A` | multi_nli + snli | last token |
 | [SeanLee97/angle-bert-base-uncased-nli-en-v1](https://huggingface.co/SeanLee97/angle-bert-base-uncased-nli-en-v1) |  bert-base-uncased | N | EN | N | multi_nli + snli | `cls_avg` |
 | [SeanLee97/angle-roberta-wwm-base-zhnli-v1](https://huggingface.co/SeanLee97/angle-roberta-wwm-base-zhnli-v1) |  hfl/chinese-roberta-wwm-ext | N | ZH-CN | N | zh_nli_all | `cls` |
 | [SeanLee97/angle-llama-7b-zhnli-v1](https://huggingface.co/SeanLee97/angle-llama-7b-zhnli-v1) |  NousResearch/Llama-2-7b-hf | Y | ZH-CN | `Prompts.B` | zh_nli_all | last token |
-
-
-
-> <small>💬 The model above was trained using BERT's hyperparameters. Currently, We are working on searching for even better hyperparameters for Angle-LLaMA. We plan to release more advanced pre-trained models that will further enhance performance. Stay tuned ;)😉 </small>
 
 
 **📝 Training Details:**
@@ -83,9 +80,9 @@ CUDA_VISIBLE_DEVICES=0,1 python eval.py \
 | Model | STS12 | STS13 | STS14 | STS15 | STS16 | STSBenchmark | SICKRelatedness |  Avg. |
 | ------- |-------|-------|-------|-------|-------|--------------|-----------------|-------|
 | [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027) | 78.68 | 90.58 | 85.49 | 89.56 | 86.91 |    88.92     |      81.18      | 85.90 |
-| [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) | 79.00 | 90.56 | 85.79 | 89.43 | 87.00 |    88.97     |      80.94      | **85.96** |
+| [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) | 79.00 | 90.56 | 85.79 | 89.43 | 87.00 |    88.97     |      80.94      | 85.96 |
+| [SeanLee97/angle-llama-13b-nli](https://huggingface.co/SeanLee97/angle-llama-13b-nli)  | 79.33 | 90.65 | 86.89 | 90.45 | 87.32 |    89.69     |      81.32       | **86.52** |
 | [SeanLee97/angle-bert-base-uncased-nli-en-v1](https://huggingface.co/SeanLee97/angle-bert-base-uncased-nli-en-v1) | 75.09 | 85.56 | 80.66 | 86.44 | 82.47 | 85.16 | 81.23 | 82.37 |
-
 
 
 ### Chinese STS Results
@@ -292,4 +289,5 @@ When using our pre-trained LLM-based models and using `xxx in one word:` prompt,
 
 | 📅 | Description |
 |----|------|
+| 2023 Nov 2 |  Release an English pretrained model: `SeanLee97/angle-llama-13b-nli` |
 | 2023 Oct 28 |  Release two chinese pretrained models: `SeanLee97/angle-roberta-wwm-base-zhnli-v1` and `SeanLee97/angle-llama-7b-zhnli-v1`; Add chinese README.md |
