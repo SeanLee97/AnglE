@@ -444,6 +444,7 @@ class AnglE:
                  pretrained_model_path: Optional[str] = None,
                  pretrained_lora_path: Optional[str] = None,
                  apply_bfloat16: Optional[bool] = None,
+                 torch_dtype: Optional[torch.dtype] = None,
                  **kwargs: Any):
         super().__init__()
         self.max_length = max_length
@@ -458,11 +459,9 @@ class AnglE:
                 logger.info('LLM detected, automatically set is_llm=True. If it is wrong, you can manually set `is_llm`.')
         self.apply_lora = apply_lora
         if self.apply_lora is None:
-            self.apply_lora = self.is_llm
             if self.is_llm:
+                self.apply_lora = True
                 logger.info('LLM detected, automatically set apply_lora=True. If it is wrong, you can manually set `apply_lora`.')
-            else:
-                self.apply_lora = False
 
         self.gpu_count = torch.cuda.device_count()
         self.prompt = None
@@ -490,48 +489,49 @@ class AnglE:
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True)
         model_kwargs = model_kwargs if model_kwargs is not None else {}
-        if self.apply_lora:
-            lora_config['bias'] = "none"
-            lora_config['task_type'] = TaskType.CAUSAL_LM
+        if self.is_llm:
+            # LLM
+            if self.apply_lora:
+                lora_config['bias'] = "none"
+                lora_config['task_type'] = TaskType.CAUSAL_LM
+                device_map = "auto"
+                if train_mode and self.gpu_count > 1:
+                    device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
 
-            device_map = "auto"
-            if train_mode and self.gpu_count > 1:
-                device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
+                if load_kbit == 4:
+                    import bitsandbytes as bnb
+                    from transformers import BitsAndBytesConfig
 
-            if load_kbit == 4:
-                import bitsandbytes as bnb
-                from transformers import BitsAndBytesConfig
+                    def find_all_linear_names(model):
+                        cls = bnb.nn.Linear4bit
+                        lora_module_names = set()
+                        for name, module in model.named_modules():
+                            if isinstance(module, cls):
+                                names = name.split('.')
+                                lora_module_names.add(names[0] if len(names) == 1 else names[-1])
 
-                def find_all_linear_names(model):
-                    cls = bnb.nn.Linear4bit
-                    lora_module_names = set()
-                    for name, module in model.named_modules():
-                        if isinstance(module, cls):
-                            names = name.split('.')
-                            lora_module_names.add(names[0] if len(names) == 1 else names[-1])
+                        if 'lm_head' in lora_module_names:
+                            lora_module_names.remove('lm_head')
+                        return list(lora_module_names)
 
-                    if 'lm_head' in lora_module_names:
-                        lora_module_names.remove('lm_head')
-                    return list(lora_module_names)
-
-                model = AutoModelForCausalLM.from_pretrained(
-                    model_name_or_path,
-                    load_in_4bit=True,
-                    config=None,
-                    quantization_config=BitsAndBytesConfig(
+                    model = AutoModelForCausalLM.from_pretrained(
+                        model_name_or_path,
                         load_in_4bit=True,
-                        llm_int8_threshold=6.0,
-                        llm_int8_has_fp16_weight=False,
-                        bnb_4bit_compute_dtype=torch.float32,
-                        bnb_4bit_use_double_quant=True,
-                        bnb_4bit_quant_type='nf4',
-                    ),
-                    torch_dtype=torch.float32,
-                    device_map=device_map,
-                    trust_remote_code=True,
-                )
-                if train_mode:
-                    model = prepare_model_for_kbit_training(model)
+                        config=None,
+                        quantization_config=BitsAndBytesConfig(
+                            load_in_4bit=True,
+                            llm_int8_threshold=6.0,
+                            llm_int8_has_fp16_weight=False,
+                            bnb_4bit_compute_dtype=torch.float32,
+                            bnb_4bit_use_double_quant=True,
+                            bnb_4bit_quant_type='nf4',
+                        ),
+                        torch_dtype=torch.float32,
+                        device_map=device_map,
+                        trust_remote_code=True,
+                    )
+                    if train_mode:
+                        model = prepare_model_for_kbit_training(model)
                     if pretrained_lora_path is not None:
                         logger.info(f'>>> load lora weight from {pretrained_lora_path}')
                         model = PeftModel.from_pretrained(
@@ -541,66 +541,93 @@ class AnglE:
                             device_map=device_map,
                             is_trainable=train_mode
                         )
-                    else:
+                    elif train_mode:
                         target_modules = find_all_linear_names(model)
                         lora_config['target_modules'] = target_modules
                         logger.info(f'lora target modules={target_modules}')
                         peft_config = LoraConfig(**lora_config)
                         model = get_peft_model(model, peft_config)
                     model = AnglE.kbit_post_handle(model)
-                    model.print_trainable_parameters()
-                self.backbone = model
-            else:
-                if train_mode:
-                    model = AutoModelForCausalLM.from_pretrained(
-                        model_name_or_path,
-                        load_in_8bit=load_kbit == 8,
-                        torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
-                        device_map=device_map,
-                        trust_remote_code=True,
-                    )
-                    if load_kbit == 8:
-                        model = prepare_model_for_int8_training(model)
-                    if pretrained_lora_path is not None:
-                        print(f'>>> load lora weight from {pretrained_lora_path}')
-                        model = PeftModel.from_pretrained(
-                            model,
-                            pretrained_lora_path,
+                    self.backbone = model
+                else:
+                    if train_mode:
+                        model = AutoModelForCausalLM.from_pretrained(
+                            model_name_or_path,
+                            load_in_8bit=load_kbit == 8,
                             torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
                             device_map=device_map,
-                            is_trainable=train_mode
+                            trust_remote_code=True,
                         )
+                        if load_kbit == 8:
+                            model = prepare_model_for_int8_training(model)
+                        if pretrained_lora_path is not None:
+                            print(f'>>> load lora weight from {pretrained_lora_path}')
+                            model = PeftModel.from_pretrained(
+                                model,
+                                pretrained_lora_path,
+                                torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
+                                device_map=device_map,
+                                is_trainable=train_mode
+                            )
+                        else:
+                            peft_config = LoraConfig(**lora_config)
+                            model = get_peft_model(model, peft_config)
                     else:
-                        peft_config = LoraConfig(**lora_config)
-                        model = get_peft_model(model, peft_config)
-                    model.print_trainable_parameters()
+                        if self.apply_bfloat16:
+                            model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
+                                                                         output_hidden_states=True,
+                                                                         trust_remote_code=True).bfloat16().cuda()
+                        else:
+                            model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
+                                                                         device_map=device_map,
+                                                                         output_hidden_states=True,
+                                                                         trust_remote_code=True,
+                                                                         load_in_8bit=load_kbit == 8,
+                                                                         torch_dtype=torch_dtype or torch.float16)
+                        if pretrained_lora_path is not None:
+                            logger.info(f'>>> load lora weight from {pretrained_lora_path}')
+                            model = PeftModel.from_pretrained(
+                                model,
+                                pretrained_lora_path,
+                                torch_dtype=torch.float16,
+                                device_map=device_map,
+                                is_trainable=train_mode
+                            )
+                    self.backbone = model
+            else:
+                if self.apply_bfloat16:
+                    model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
+                                                                 output_hidden_states=True,
+                                                                 trust_remote_code=True).bfloat16().cuda()
                 else:
-                    if self.apply_bfloat16:
-                        model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
-                                                                     output_hidden_states=True,
-                                                                     trust_remote_code=True).bfloat16().cuda()
-                    else:
-                        model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
-                                                                    device_map=device_map,
-                                                                    output_hidden_states=True,
-                                                                    trust_remote_code=True,
-                                                                    load_in_8bit=load_kbit == 8,
-                                                                    torch_dtype=torch.float16)
-                    if pretrained_lora_path is not None:
-                        logger.info(f'>>> load lora weight from {pretrained_lora_path}')
-                        model = PeftModel.from_pretrained(
-                            model,
-                            pretrained_lora_path,
-                            torch_dtype=torch.float16,
-                            device_map=device_map,
-                            is_trainable=train_mode
-                        )
-
+                    model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
+                                                                 device_map=device_map,
+                                                                 output_hidden_states=True,
+                                                                 trust_remote_code=True,
+                                                                 load_in_8bit=load_kbit == 8,
+                                                                 torch_dtype=torch_dtype or torch.float16)
                 self.backbone = model
         else:
-            if pretrained_model_path is not None:
-                logger.info(f'>>> load pretrained model from {pretrained_model_path}')
-            self.backbone = AutoModel.from_pretrained(pretrained_model_path or model_name_or_path, trust_remote_code=True,)
+            # non-LLMs
+            if self.apply_lora:
+                model = AutoModel.from_pretrained(pretrained_model_path or model_name_or_path, trust_remote_code=True)
+                if pretrained_lora_path is not None:
+                    model = PeftModel.from_pretrained(
+                        model,
+                        pretrained_lora_path,
+                        is_trainable=train_mode
+                    )
+                else:
+                    peft_config = LoraConfig(**lora_config)
+                    model = get_peft_model(model, peft_config)
+                self.backbone = model
+            else:
+                if pretrained_model_path is not None:
+                    logger.info(f'>>> load pretrained model from {pretrained_model_path}')
+                self.backbone = AutoModel.from_pretrained(pretrained_model_path or model_name_or_path, trust_remote_code=True)
+
+        if train_mode and self.apply_lora:
+            self.backbone.print_trainable_parameters()
 
         self.backbone.config.use_cache = False
         self.pooler = Pooler(self.backbone, pooling_strategy=self.pooling_strategy, is_llm=self.is_llm)

@@ -6,9 +6,8 @@
 
 🔥 **A New SOTA** for Semantic Textual Similarity! 
 
-<p color='red'>
-    🔥 Our universal sentence embedding [whereisai/UAE-Large-V1](https://huggingface.co/whereisai/UAE-Large-V1) achieves SOTA on the MTEB Leaderboard with average score 64.64! 
-<p>
+
+🔥 **Our universal English sentence embedding [whereisai/UAE-Large-V1](https://huggingface.co/whereisai/UAE-Large-V1) achieves SOTA on the MTEB Leaderboard with an average score of 64.64!**
 
 
 <a href="https://arxiv.org/abs/2309.12871">
@@ -110,6 +109,36 @@ AnglE supports two APIs, one is the `transformers` API, the other is the `AnglE`
 ```bash
 python -m pip install -U angle-emb
 ```
+
+### UAE
+
+1) None-Retrieval
+
+```python
+from angle_emb import AnglE
+
+angle = AnglE.from_pretrained('whereisai/UAE-Large-V1', pooling_strategy='cls').cuda()
+vec = angle.encode('hello world', to_numpy=True)
+print(vec)
+vecs = angle.encode(['hello world1', 'hello world2'], to_numpy=True)
+print(vecs)
+```
+
+2) Retrieval
+
+For retrieval purposes, please use the prompt `Represent this sentence for searching relevant passages: {text}`.
+
+```python
+from angle_emb import AnglE
+
+angle = AnglE.from_pretrained('whereisai/UAE-Large-V1', pooling_strategy='cls').cuda()
+angle.set_prompt(prompt='Represent this sentence for searching relevant passages: {text}')
+vec = angle.encode({'text': 'hello world'}, to_numpy=True)
+print(vec)
+vecs = angle.encode([{'text': 'hello world1', 'text': 'hello world2'}], to_numpy=True)
+print(vecs)
+```
+
 
 ### Angle-LLaMA
 
@@ -295,5 +324,6 @@ When using our pre-trained LLM-based models and using `xxx in one word:` prompt,
 
 | 📅 | Description |
 |----|------|
+| 2023 Dec 4 |  Release a universal English sentence embedding model: [whereisai/UAE-Large-V1](https://huggingface.co/whereisai/UAE-Large-V1)  |
 | 2023 Nov 2 |  Release an English pretrained model: `SeanLee97/angle-llama-13b-nli` |
 | 2023 Oct 28 |  Release two chinese pretrained models: `SeanLee97/angle-roberta-wwm-base-zhnli-v1` and `SeanLee97/angle-llama-7b-zhnli-v1`; Add chinese README.md |
