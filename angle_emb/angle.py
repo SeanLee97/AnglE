@@ -149,6 +149,7 @@ def optimal_threshold(y_true, y_pred):
 class Prompts:
     A = 'Summarize sentence "{text}" in one word:"'
     B = 'You can only output one word. Summarize "{text}":"'
+    C = 'Represent this sentence for searching relevant passages: {text}'
 
     @classmethod
     def list_prompts(cls):
