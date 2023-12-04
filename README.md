@@ -50,7 +50,7 @@
 
 | 🤗 HF | Backbone | LLM | Language | Prompt | Datasets | Pooling Strategy |
 |----|------|------|------|------|------|------|
-| [whereisai/UAE-Large-V1](https://huggingface.co/whereisai/UAE-Large-V1) |  / | N | EN | N | / | cls |
+| [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) |  / | N | EN | N | / | cls |
 | [SeanLee97/angle-llama-13b-nli](https://huggingface.co/SeanLee97/angle-llama-13b-nli) |  NousResearch/Llama-2-13b-hf | Y | EN | `Prompts.A` | multi_nli + snli | last token |
 | [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) |  NousResearch/Llama-2-7b-hf | Y | EN | `Prompts.A` | multi_nli + snli | last token |
 | [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027) |  NousResearch/Llama-2-7b-hf | Y | EN | `Prompts.A` | multi_nli + snli | last token |
@@ -124,7 +124,7 @@ python -m pip install -U angle-emb
 ```python
 from angle_emb import AnglE
 
-angle = AnglE.from_pretrained('whereisai/UAE-Large-V1', pooling_strategy='cls').cuda()
+angle = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').cuda()
 vec = angle.encode('hello world', to_numpy=True)
 print(vec)
 vecs = angle.encode(['hello world1', 'hello world2'], to_numpy=True)
@@ -138,7 +138,7 @@ For retrieval purposes, please use the prompt `Prompts.C`.
 ```python
 from angle_emb import AnglE, Prompts
 
-angle = AnglE.from_pretrained('whereisai/UAE-Large-V1', pooling_strategy='cls').cuda()
+angle = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').cuda()
 angle.set_prompt(prompt=Prompts.C)
 vec = angle.encode({'text': 'hello world'}, to_numpy=True)
 print(vec)
@@ -320,6 +320,6 @@ You are welcome to use our code and pre-trained models. If you use our code and 
 
 | 📅 | Description |
 |----|------|
-| 2023 Dec 4 |  Release a universal English sentence embedding model: [whereisai/UAE-Large-V1](https://huggingface.co/whereisai/UAE-Large-V1)  |
+| 2023 Dec 4 |  Release a universal English sentence embedding model: [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1)  |
 | 2023 Nov 2 |  Release an English pretrained model: `SeanLee97/angle-llama-13b-nli` |
 | 2023 Oct 28 |  Release two chinese pretrained models: `SeanLee97/angle-roberta-wwm-base-zhnli-v1` and `SeanLee97/angle-llama-7b-zhnli-v1`; Add chinese README.md |
