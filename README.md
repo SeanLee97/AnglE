@@ -33,7 +33,14 @@
 
 
 <details>
-<summary>📊 Click to show main results of AnglE</summary>
+<summary>📊 Click to show MTEB Leaderboard of AnglE</summary>
+<p align='center'>
+<img src='assets/UAE-MTEB.png'>
+</p>
+</details>
+
+<details>
+<summary>📊 Click to show STS benchmark results of AnglE</summary>
 <p align='center'>
 <img src='assets/angle-results.png'>
 </p>
