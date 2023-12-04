@@ -112,7 +112,7 @@ python -m pip install -U angle-emb
 
 ### UAE
 
-1) None-Retrieval
+1) Non-Retrieval
 
 ```python
 from angle_emb import AnglE
