@@ -7,7 +7,7 @@
 🔥 **A New SOTA** for Semantic Textual Similarity! 
 
 
-🔥 **Our universal English sentence embedding [whereisai/UAE-Large-V1](https://huggingface.co/whereisai/UAE-Large-V1) achieves SOTA on the MTEB Leaderboard with an average score of 64.64!**
+🔥 **Our universal English sentence embedding [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) achieves SOTA on the MTEB Leaderboard with an average score of 64.64!**
 
 
 <a href="https://arxiv.org/abs/2309.12871">
