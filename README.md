@@ -126,13 +126,13 @@ print(vecs)
 
 2) Retrieval
 
-For retrieval purposes, please use the prompt `Represent this sentence for searching relevant passages: {text}`.
+For retrieval purposes, please use the prompt `Prompts.C`.
 
 ```python
-from angle_emb import AnglE
+from angle_emb import AnglE, Prompts
 
 angle = AnglE.from_pretrained('whereisai/UAE-Large-V1', pooling_strategy='cls').cuda()
-angle.set_prompt(prompt='Represent this sentence for searching relevant passages: {text}')
+angle.set_prompt(prompt=Prompts.C)
 vec = angle.encode({'text': 'hello world'}, to_numpy=True)
 print(vec)
 vecs = angle.encode([{'text': 'hello world1', 'text': 'hello world2'}], to_numpy=True)
