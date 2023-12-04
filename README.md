@@ -316,17 +316,6 @@ You are welcome to use our code and pre-trained models. If you use our code and 
 }
 ```
 
-When using our pre-trained LLM-based models and using `xxx in one word:` prompt, it is recommended to cite the following work in addition to the above citation:
-
-```bibtex
-@article{jiang2023scaling,
-  title={Scaling Sentence Embeddings with Large Language Models},
-  author={Jiang, Ting and Huang, Shaohan and Luan, Zhongzhi and Wang, Deqing and Zhuang, Fuzhen},
-  journal={arXiv preprint arXiv:2307.16645},
-  year={2023}
-}
-```
-
 # ChangeLogs
 
 | 📅 | Description |
