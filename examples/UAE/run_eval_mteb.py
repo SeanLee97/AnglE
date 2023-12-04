@@ -1,3 +1,5 @@
+# modified from: https://github.com/FlagOpen/FlagEmbedding/blob/master/C_MTEB/eval_MTEB.py
+
 import argparse
 import random
 
@@ -43,8 +45,8 @@ if __name__ == '__main__':
         "STSBenchmark",
         "SummEval",
     ] + ['TRECCOVID']
-    # task_names = [t.description["name"] for t in MTEB(task_types=args.task_type, task_langs=['en']).tasks]
-    # random.shuffle(task_names)
+    task_names = [t.description["name"] for t in MTEB(task_types=args.task_type, task_langs=['en']).tasks]
+    random.shuffle(task_names)
     for task in task_names:
         if task in ['MSMARCOv2']:
             print('Skip task: {}, since it has no test split'.format(task))

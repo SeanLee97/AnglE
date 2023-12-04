@@ -1,3 +1,5 @@
+# modified from: https://github.com/FlagOpen/FlagEmbedding/blob/master/C_MTEB/flag_dres_model.py
+
 from typing import cast, List, Dict, Union
 
 import numpy as np
