@@ -7,7 +7,7 @@
 🔥 **A New SOTA** for Semantic Textual Similarity! 
 
 
-🔥 **Our universal English sentence embedding [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) achieves SOTA on the MTEB Leaderboard with an average score of 64.64!**
+🔥 **Our universal sentence embedding [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) achieves SOTA on the [MTEB Leaderboard](https://huggingface.co/spaces/mteb/leaderboard) with an average score of 64.64!**
 
 
 <a href="https://arxiv.org/abs/2309.12871">
@@ -119,19 +119,7 @@ python -m pip install -U angle-emb
 
 ### UAE
 
-1) Non-Retrieval
-
-```python
-from angle_emb import AnglE
-
-angle = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').cuda()
-vec = angle.encode('hello world', to_numpy=True)
-print(vec)
-vecs = angle.encode(['hello world1', 'hello world2'], to_numpy=True)
-print(vecs)
-```
-
-2) Retrieval
+1) For Retrieval Purposes
 
 For retrieval purposes, please use the prompt `Prompts.C`.
 
@@ -146,6 +134,39 @@ vecs = angle.encode([{'text': 'hello world1', 'text': 'hello world2'}], to_numpy
 print(vecs)
 ```
 
+2) For non-Retrieval Purposes
+
+```python
+from angle_emb import AnglE
+
+angle = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').cuda()
+vec = angle.encode('hello world', to_numpy=True)
+print(vec)
+vecs = angle.encode(['hello world1', 'hello world2'], to_numpy=True)
+print(vecs)
+```
+
+<details>
+<summary>Difference between retrieval and non-retrieval sentence embeddings. [click to expand]</summary>
+
+In UAE, we use different approaches for retrieval and non-retrieval tasks, each serving a different purpose. 
+
+**Retrieval tasks aim to find relevant documents, and as a result, the related documents may not have strict semantic similarities to each other.**
+
+For instance, when querying "How about ChatGPT?", the related documents are those that contain information related to "ChatGPT," such as "ChatGPT is amazing..." or "ChatGPT is bad....".
+
+Conversely, **non-retrieval tasks, such as semantic textual similarity, require sentences that are semantically similar.**
+
+For example, a sentence semantically similar to "How about ChatGPT?" could be "What is your opinion about ChatGPT?".
+
+To distinguish between these two types of tasks, we use different prompts. 
+
+For retrieval tasks, we use the prompt "Represent this sentence for searching relevant passages: {text}" (Prompts.C in angle_emb). 
+
+For non-retrieval tasks, we set the prompt to empty, i.e., just input your text without specifying a prompt.
+
+So, if your scenario is retrieval-related, it is highly recommended to set the prompt with angle.set_prompt(prompt=Prompts.C). If not, leave the prompt empty or use angle.set_prompt(prompt=None).
+</details>
 
 ### Angle-LLaMA
 
