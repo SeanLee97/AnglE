@@ -11,8 +11,8 @@ RETRIEVAL_INSTRUCT = 'Represent this sentence for searching relevant passages:'
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name_or_path', default="BAAI/bge-large-en-v1.5", type=str)
-    parser.add_argument('--angle_name_or_path', default="angle-bge-large-en-v3-3", type=str)
+    parser.add_argument('--model_name_or_path', default=None, required=True, type=str)
+    parser.add_argument('--angle_name_or_path', default=None, required=True, type=str)
     parser.add_argument('--task_type', default=None, type=str, help="task type. Default is None, which means using all task types")
     parser.add_argument('--add_instruction', action='store_true', help="whether to add instruction for query")
     parser.add_argument('--pooling_method', default='cls', type=str)
