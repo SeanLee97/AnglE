@@ -268,10 +268,7 @@ $ cd SentEval/data/downstream
 $ bash download_dataset.sh
 ```
 
-### 2. Train w/ `train_angle.py`
-The training interface is still messy, we are working on making it better. Currently you can modify `train_angle.py` to train your own models.
-
-### 3. Custom Train
+### 2. Custom Train
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1h28jHvv_x-0fZ0tItIMjf8rJGp3GcO5V?usp=sharing)
 
