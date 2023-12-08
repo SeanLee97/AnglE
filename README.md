@@ -33,14 +33,14 @@
 
 
 <details>
-<summary>📊 Click to show MTEB Leaderboard of AnglE</summary>
+<summary>📊 Results on MTEB Leaderboard [click to expand]</summary>
 <p align='center'>
 <img src='assets/UAE-MTEB.png'>
 </p>
 </details>
 
 <details>
-<summary>📊 Click to show STS benchmark results of AnglE</summary>
+<summary>📊 Results on STS benchmark [click to expand]</summary>
 <p align='center'>
 <img src='assets/angle-results.png'>
 </p>
@@ -48,14 +48,14 @@
 
 ## 🤗 Pretrained Models
 
-| 🤗 HF | Backbone | LLM | Language | Prompt | Datasets | Pooling Strategy |
+| 🤗 HF | Dependent Backbone | LLM | Language | Prompt | Datasets | Pooling Strategy |
 |----|------|------|------|------|------|------|
-| [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) |  bge-large | N | EN | N | `Prompts.C` for retrieval purposes, `None` for others | cls |
+| [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) |  N | N | EN | `Prompts.C` for retrieval purposes, `None` for others | / | cls |
 | [SeanLee97/angle-llama-13b-nli](https://huggingface.co/SeanLee97/angle-llama-13b-nli) |  NousResearch/Llama-2-13b-hf | Y | EN | `Prompts.A` | multi_nli + snli | last token |
 | [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) |  NousResearch/Llama-2-7b-hf | Y | EN | `Prompts.A` | multi_nli + snli | last token |
 | [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027) |  NousResearch/Llama-2-7b-hf | Y | EN | `Prompts.A` | multi_nli + snli | last token |
-| [SeanLee97/angle-bert-base-uncased-nli-en-v1](https://huggingface.co/SeanLee97/angle-bert-base-uncased-nli-en-v1) |  bert-base-uncased | N | EN | N | multi_nli + snli | `cls_avg` |
-| [SeanLee97/angle-roberta-wwm-base-zhnli-v1](https://huggingface.co/SeanLee97/angle-roberta-wwm-base-zhnli-v1) |  hfl/chinese-roberta-wwm-ext | N | ZH-CN | N | zh_nli_all | `cls` |
+| [SeanLee97/angle-bert-base-uncased-nli-en-v1](https://huggingface.co/SeanLee97/angle-bert-base-uncased-nli-en-v1) |  N | N | EN | N | multi_nli + snli | `cls_avg` |
+| [SeanLee97/angle-roberta-wwm-base-zhnli-v1](https://huggingface.co/SeanLee97/angle-roberta-wwm-base-zhnli-v1) |  N | N | ZH-CN | N | zh_nli_all | `cls` |
 | [SeanLee97/angle-llama-7b-zhnli-v1](https://huggingface.co/SeanLee97/angle-llama-7b-zhnli-v1) |  NousResearch/Llama-2-7b-hf | Y | ZH-CN | `Prompts.B` | zh_nli_all | last token |
 
 
