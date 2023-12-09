@@ -37,13 +37,14 @@ from peft.tuners.lora import LoraLayer
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('AnglE')
 
+
 def set_device():
     if torch.cuda.is_available():
         return 'cuda'
     elif torch.backends.mps.is_available():
         return 'mps'
-    else:
-        return 'cpu'
+    return 'cpu'
+
 
 def categorical_crossentropy(y_true: torch.Tensor, y_pred: torch.Tensor, from_logits: bool = True):
     if from_logits:
@@ -458,7 +459,7 @@ class AnglE:
         self.max_length = max_length
         self.train_mode = train_mode
         self.pooling_strategy = pooling_strategy
-        self.device = set_device()  
+        self.device = set_device()
         self.load_kbit = load_kbit
         self.is_llm = is_llm
         if is_llm is None:
@@ -472,8 +473,10 @@ class AnglE:
                 logger.info('LLM detected, automatically set apply_lora=True. If it is wrong, you can manually set `apply_lora`.')
         if self.device == 'cuda':
             self.gpu_count = torch.cuda.device_count()
-        else:
+        elif self.device == 'mps':
             self.gpu_count = 1
+        else:
+            self.gpu_count = 0
 
         self.prompt = None
         if self.is_llm:
