@@ -37,6 +37,13 @@ from peft.tuners.lora import LoraLayer
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('AnglE')
 
+def set_device():
+    if torch.cuda.is_available():
+        return 'cuda'
+    elif torch.backends.mps.is_available():
+        return 'mps'
+    else:
+        return 'cpu'
 
 def categorical_crossentropy(y_true: torch.Tensor, y_pred: torch.Tensor, from_logits: bool = True):
     if from_logits:
@@ -451,7 +458,7 @@ class AnglE:
         self.max_length = max_length
         self.train_mode = train_mode
         self.pooling_strategy = pooling_strategy
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = set_device()  
         self.load_kbit = load_kbit
         self.is_llm = is_llm
         if is_llm is None:
@@ -463,8 +470,11 @@ class AnglE:
             if self.is_llm:
                 self.apply_lora = True
                 logger.info('LLM detected, automatically set apply_lora=True. If it is wrong, you can manually set `apply_lora`.')
+        if self.device == 'cuda':
+            self.gpu_count = torch.cuda.device_count()
+        else:
+            self.gpu_count = 1
 
-        self.gpu_count = torch.cuda.device_count()
         self.prompt = None
         if self.is_llm:
             logger.info('LLM detected, automatically set prompt. '
@@ -577,7 +587,7 @@ class AnglE:
                         if self.apply_bfloat16:
                             model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
                                                                          output_hidden_states=True,
-                                                                         trust_remote_code=True).bfloat16().cuda()
+                                                                         trust_remote_code=True).bfloat16().to(torch.device(self.device))
                         else:
                             model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
                                                                          device_map=device_map,
@@ -599,7 +609,7 @@ class AnglE:
                 if self.apply_bfloat16:
                     model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
                                                                  output_hidden_states=True,
-                                                                 trust_remote_code=True).bfloat16().cuda()
+                                                                 trust_remote_code=True).bfloat16().to(torch.device(self.device))
                 else:
                     model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
                                                                  device_map=device_map,
@@ -645,7 +655,7 @@ class AnglE:
 
     def cuda(self):
         if self.load_kbit is None:
-            self.backbone = self.backbone.cuda()
+            self.backbone = self.backbone.to(torch.device(self.device))
         return self
 
     def check_llm(self, model_name_or_path: str) -> bool:
