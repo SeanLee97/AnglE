@@ -130,7 +130,7 @@ angle = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').
 angle.set_prompt(prompt=Prompts.C)
 vec = angle.encode({'text': 'hello world'}, to_numpy=True)
 print(vec)
-vecs = angle.encode([{'text': 'hello world1', 'text': 'hello world2'}], to_numpy=True)
+vecs = angle.encode([{'text': 'hello world1'}, {'text': 'hello world2'}], to_numpy=True)
 print(vecs)
 ```
 
