@@ -4,7 +4,6 @@ import os
 import re
 import sys
 import json
-import logging
 from functools import partial
 from typing import Any, Dict, Optional, List, Union, Tuple, Iterator, Callable
 from collections import defaultdict
@@ -33,9 +32,8 @@ from peft import (
 )
 from peft.tuners.lora import LoraLayer
 
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('AnglE')
+from . import bellm
+from .utils import logger
 
 
 def set_device():
@@ -374,10 +372,12 @@ class Pooler:
             hidden_states = self.model(output_hidden_states=True, return_dict=True, **inputs).hidden_states[-1]
             batch_size = hidden_states.shape[0]
             if self.model.config.pad_token_id is None and batch_size != 1:
-                raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-            sequence_lengths = (torch.eq(inputs['input_ids'], self.model.config.pad_token_id).long().argmax(-1) - 1).to(
-                hidden_states.device
-            )
+                sequence_lengths = -1
+                # raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+            else:
+                sequence_lengths = (torch.eq(inputs['input_ids'], self.model.config.pad_token_id).long().argmax(-1) - 1).to(
+                    hidden_states.device
+                )
 
             outputs = hidden_states[torch.arange(batch_size, device=hidden_states.device), sequence_lengths]
         else:
@@ -455,6 +455,8 @@ class AnglE:
                  apply_bfloat16: Optional[bool] = None,
                  torch_dtype: Optional[torch.dtype] = None,
                  device: Optional[str] = None,
+                 bellm_class_name: Optional[str] = None,
+                 kbit_kwargs: Optional[Dict] = None,
                  **kwargs: Any):
         super().__init__()
         self.max_length = max_length
@@ -466,13 +468,16 @@ class AnglE:
             self.device = device
         else:
             self.device = set_device()
+        self.is_bellm = bellm.check_bellm(bellm_class_name)
+        if self.is_bellm:
+            logger.info('BeLLM detected!')
         if is_llm is None:
-            self.is_llm = self.check_llm(model_name_or_path)
+            self.is_llm = self.check_llm(model_name_or_path) or self.is_bellm
             if self.is_llm:
                 logger.info('LLM detected, automatically set is_llm=True. If it is wrong, you can manually set `is_llm`.')
         self.apply_lora = apply_lora
         if self.apply_lora is None:
-            if self.is_llm:
+            if self.is_llm or self.is_bellm:
                 self.apply_lora = True
                 logger.info('LLM detected, automatically set apply_lora=True. If it is wrong, you can manually set `apply_lora`.')
         if self.device == 'cuda':
@@ -483,7 +488,8 @@ class AnglE:
             self.gpu_count = 0
 
         self.prompt = None
-        if self.is_llm:
+        if self.is_llm and not self.is_bellm:
+            # do not set prompt for bellm
             logger.info('LLM detected, automatically set prompt. '
                         'You can change this setting by manually configuring the `set_prompt()` function.')
             self.set_prompt()
@@ -504,35 +510,42 @@ class AnglE:
             }
             if lora_config_kwargs is not None:
                 lora_config.update(lora_config_kwargs)
+            if train_mode:
+                logger.info(f'lora_config={lora_config}')
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True)
+        if self.is_llm and self.tokenizer.pad_token_id is None:
+            self.tokenizer.pad_token_id = 0
+
         model_kwargs = model_kwargs if model_kwargs is not None else {}
+        kbit_kwargs = kbit_kwargs if kbit_kwargs is not None else {}
         if self.is_llm:
+            device_map = "auto"
+            MODEL_CLASS = getattr(bellm, bellm_class_name) if self.is_bellm else AutoModelForCausalLM
+            if train_mode and self.gpu_count > 1:
+                device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}       
             # LLM
             if self.apply_lora:
+                import bitsandbytes as bnb
+                from transformers import BitsAndBytesConfig
+
+                def find_all_linear_names(model):
+                    cls = bnb.nn.Linear4bit
+                    lora_module_names = set()
+                    for name, module in model.named_modules():
+                        if isinstance(module, cls):
+                            names = name.split('.')
+                            lora_module_names.add(names[0] if len(names) == 1 else names[-1])
+
+                    if 'lm_head' in lora_module_names:
+                        lora_module_names.remove('lm_head')
+                    return list(lora_module_names)
+
                 lora_config['bias'] = "none"
-                lora_config['task_type'] = TaskType.CAUSAL_LM
-                device_map = "auto"
-                if train_mode and self.gpu_count > 1:
-                    device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
+                lora_config['task_type'] = TaskType.FEATURE_EXTRACTION if self.is_bellm else TaskType.CAUSAL_LM             
 
                 if load_kbit == 4:
-                    import bitsandbytes as bnb
-                    from transformers import BitsAndBytesConfig
-
-                    def find_all_linear_names(model):
-                        cls = bnb.nn.Linear4bit
-                        lora_module_names = set()
-                        for name, module in model.named_modules():
-                            if isinstance(module, cls):
-                                names = name.split('.')
-                                lora_module_names.add(names[0] if len(names) == 1 else names[-1])
-
-                        if 'lm_head' in lora_module_names:
-                            lora_module_names.remove('lm_head')
-                        return list(lora_module_names)
-
-                    model = AutoModelForCausalLM.from_pretrained(
+                    model = MODEL_CLASS.from_pretrained(
                         model_name_or_path,
                         load_in_4bit=True,
                         config=None,
@@ -547,11 +560,11 @@ class AnglE:
                         torch_dtype=torch.float32,
                         device_map=device_map,
                         trust_remote_code=True,
-                    )
+                    )     
                     if train_mode:
-                        model = prepare_model_for_kbit_training(model)
+                        model = prepare_model_for_kbit_training(model, **kbit_kwargs)
                     if pretrained_lora_path is not None:
-                        logger.info(f'>>> load lora weight from {pretrained_lora_path}')
+                        print(f'Load lora weight from {pretrained_lora_path}')
                         model = PeftModel.from_pretrained(
                             model,
                             pretrained_lora_path,
@@ -560,16 +573,17 @@ class AnglE:
                             is_trainable=train_mode
                         )
                     elif train_mode:
-                        target_modules = find_all_linear_names(model)
-                        lora_config['target_modules'] = target_modules
-                        logger.info(f'lora target modules={target_modules}')
+                        if 'target_modules' not in lora_config or lora_config.get('target_modules', None) is None:
+                            target_modules = find_all_linear_names(model)
+                            lora_config['target_modules'] = target_modules
+                            logger.info(f'lora target modules={target_modules}')
                         peft_config = LoraConfig(**lora_config)
                         model = get_peft_model(model, peft_config)
                     model = AnglE.kbit_post_handle(model)
                     self.backbone = model
                 else:
                     if train_mode:
-                        model = AutoModelForCausalLM.from_pretrained(
+                        model = MODEL_CLASS.from_pretrained(
                             model_name_or_path,
                             load_in_8bit=load_kbit == 8,
                             torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
@@ -577,9 +591,13 @@ class AnglE:
                             trust_remote_code=True,
                         )
                         if load_kbit == 8:
-                            model = prepare_model_for_int8_training(model)
+                            model = prepare_model_for_int8_training(model, **kbit_kwargs)
+                            if 'target_modules' not in lora_config or lora_config.get('target_modules', None) is None:
+                                target_modules = find_all_linear_names(model)
+                                lora_config['target_modules'] = target_modules
+                                logger.info(f'lora target modules={target_modules}')
                         if pretrained_lora_path is not None:
-                            print(f'>>> load lora weight from {pretrained_lora_path}')
+                            print(f'Load lora weight from {pretrained_lora_path}')
                             model = PeftModel.from_pretrained(
                                 model,
                                 pretrained_lora_path,
@@ -592,38 +610,38 @@ class AnglE:
                             model = get_peft_model(model, peft_config)
                     else:
                         if self.apply_bfloat16:
-                            model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
-                                                                         output_hidden_states=True,
-                                                                         trust_remote_code=True).bfloat16().to(torch.device(self.device))
+                            model = MODEL_CLASS.from_pretrained(model_name_or_path,
+                                                                output_hidden_states=True,
+                                                                trust_remote_code=True).bfloat16().to(torch.device(self.device))
                         else:
-                            model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
-                                                                         device_map=device_map,
-                                                                         output_hidden_states=True,
-                                                                         trust_remote_code=True,
-                                                                         load_in_8bit=load_kbit == 8,
-                                                                         torch_dtype=torch_dtype or torch.float16)
+                            model = MODEL_CLASS.from_pretrained(model_name_or_path,
+                                                                device_map=device_map,
+                                                                output_hidden_states=True,
+                                                                trust_remote_code=True,
+                                                                load_in_8bit=load_kbit == 8,
+                                                                torch_dtype=torch_dtype or torch.float16)
                         if pretrained_lora_path is not None:
-                            logger.info(f'>>> load lora weight from {pretrained_lora_path}')
+                            logger.info(f'Load lora weight from {pretrained_lora_path}')
                             model = PeftModel.from_pretrained(
                                 model,
                                 pretrained_lora_path,
-                                torch_dtype=torch.float16,
+                                torch_dtype=torch_dtype or torch.float16,
                                 device_map=device_map,
                                 is_trainable=train_mode
                             )
                     self.backbone = model
             else:
                 if self.apply_bfloat16:
-                    model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
-                                                                 output_hidden_states=True,
-                                                                 trust_remote_code=True).bfloat16().to(torch.device(self.device))
+                    model = MODEL_CLASS.from_pretrained(model_name_or_path,
+                                                        output_hidden_states=True,
+                                                        trust_remote_code=True).bfloat16().to(torch.device(self.device))
                 else:
-                    model = AutoModelForCausalLM.from_pretrained(model_name_or_path,
-                                                                 device_map=device_map,
-                                                                 output_hidden_states=True,
-                                                                 trust_remote_code=True,
-                                                                 load_in_8bit=load_kbit == 8,
-                                                                 torch_dtype=torch_dtype or torch.float16)
+                    model = MODEL_CLASS.from_pretrained(model_name_or_path,
+                                                        device_map=device_map,
+                                                        output_hidden_states=True,
+                                                        trust_remote_code=True,
+                                                        load_in_8bit=load_kbit == 8,
+                                                        torch_dtype=torch_dtype or torch.float16)
                 self.backbone = model
         else:
             # non-LLMs
@@ -641,7 +659,7 @@ class AnglE:
                 self.backbone = model
             else:
                 if pretrained_model_path is not None:
-                    logger.info(f'>>> load pretrained model from {pretrained_model_path}')
+                    logger.info(f'Load pretrained model from {pretrained_model_path}')
                 self.backbone = AutoModel.from_pretrained(pretrained_model_path or model_name_or_path, trust_remote_code=True)
 
         if train_mode and self.apply_lora:
