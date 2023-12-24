@@ -454,7 +454,7 @@ class AnglE:
                  pretrained_lora_path: Optional[str] = None,
                  apply_bfloat16: Optional[bool] = None,
                  torch_dtype: Optional[torch.dtype] = None,
-                 device: Optional[str]=None,
+                 device: Optional[str] = None,
                  **kwargs: Any):
         super().__init__()
         self.max_length = max_length
@@ -463,7 +463,7 @@ class AnglE:
         self.load_kbit = load_kbit
         self.is_llm = is_llm
         if device:
-            self.device=device
+            self.device = device
         else:
             self.device = set_device()
         if is_llm is None:
