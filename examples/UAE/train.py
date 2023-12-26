@@ -6,7 +6,7 @@ import random
 
 import numpy as np
 import torch
-from datasets import load_dataset, Dataset, DatasetDict
+from datasets import load_dataset
 from angle_emb import AnglE, AngleDataTokenizer
 
 
@@ -46,6 +46,8 @@ parser.add_argument('--gradient_accumulation_steps', type=int, default=1, help='
 parser.add_argument('--torch_dtype', type=str, default=None, help='Specify torch_dtype, default 1')
 parser.add_argument('--fp16', type=bool, default=None, choices=[0, 1], help='Specify fp16, default None')
 parser.add_argument('--compute_similar_matrix', type=int, default=1, choices=[0, 1], help='Specify compute_similar_matrix, default 1')
+parser.add_argument('--push_to_hub', type=int, default=1, choices=[0, 1], help='Specify push_to_hub, default 0')
+parser.add_argument('--hub_model_id', type=str, default=None, help='Specify push_to_hub_model_id, default None, format like organization/model_id')
 parser.add_argument('--model_name', type=str, default='roberta-large',
                     help='Specify model_name, default roberta-large')
 args = parser.parse_args()
@@ -88,6 +90,14 @@ else:
 print(ds)
 train_ds = ds['train'].shuffle(args.dataset_seed).map(AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt), num_proc=args.workers)
 
+
+argument_kwargs = {}
+if args.push_to_hub:
+    assert args.hub_model_id is not None
+    argument_kwargs['push_to_hub'] = True,
+    argument_kwargs['hub_model_id'] = args.hub_model_id
+
+
 model.fit(
     train_ds=train_ds,
     output_dir=args.save_dir,
@@ -107,4 +117,5 @@ model.fit(
         'angle_tau': args.angle_tau,
     },
     fp16=args.fp16,
+    argument_kwargs=argument_kwargs
 )
