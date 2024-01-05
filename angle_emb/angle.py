@@ -362,23 +362,26 @@ class AngleDataCollator:
 
 
 class Pooler:
-    def __init__(self, model: PreTrainedModel, pooling_strategy: Optional[str] = None, is_llm: bool = False):
+    def __init__(self,
+                 model: PreTrainedModel,
+                 pooling_strategy: Optional[str] = None,
+                 padding_strategy: Optional[str] = None,
+                 is_llm: bool = False):
         self.model = model
         self.pooling_strategy = pooling_strategy
+        self.padding_strategy = padding_strategy
         self.is_llm = is_llm
 
     def __call__(self, inputs) -> Any:
+        if self.is_llm or self.pooling_strategy == 'last':
+            batch_size = inputs['input_ids'].shape[0]
+            if self.padding_strategy == 'left':
+                sequence_lengths = -1
+            else:
+                sequence_lengths = inputs["attention_mask"].sum(dim=1) - 1
+
         if self.is_llm:
             hidden_states = self.model(output_hidden_states=True, return_dict=True, **inputs).hidden_states[-1]
-            batch_size = hidden_states.shape[0]
-            if self.model.config.pad_token_id is None and batch_size != 1:
-                sequence_lengths = -1
-                # raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-            else:
-                sequence_lengths = (torch.eq(inputs['input_ids'], self.model.config.pad_token_id).long().argmax(-1) - 1).to(
-                    hidden_states.device
-                )
-
             outputs = hidden_states[torch.arange(batch_size, device=hidden_states.device), sequence_lengths]
         else:
             outputs = self.model(**inputs).last_hidden_state
@@ -387,7 +390,7 @@ class Pooler:
             elif self.pooling_strategy == 'cls_avg':
                 outputs = (outputs[:, 0] + torch.mean(outputs, dim=1)) / 2.0
             elif self.pooling_strategy == 'last':
-                outputs = outputs[:, -1]
+                outputs = outputs[torch.arange(batch_size, device=outputs.device), sequence_lengths]
             elif self.pooling_strategy == 'avg':
                 outputs = torch.mean(outputs, dim=1)
             elif self.pooling_strategy == 'max':
@@ -660,13 +663,20 @@ class AnglE:
             else:
                 if pretrained_model_path is not None:
                     logger.info(f'Load pretrained model from {pretrained_model_path}')
-                self.backbone = AutoModel.from_pretrained(pretrained_model_path or model_name_or_path, trust_remote_code=True)
+                self.backbone = AutoModel.from_pretrained(
+                    pretrained_model_path or model_name_or_path,
+                    trust_remote_code=True,
+                    torch_dtype=torch_dtype or "auto")
 
         if train_mode and self.apply_lora:
             self.backbone.print_trainable_parameters()
 
         self.backbone.config.use_cache = False
-        self.pooler = Pooler(self.backbone, pooling_strategy=self.pooling_strategy, is_llm=self.is_llm)
+        self.pooler = Pooler(
+            self.backbone,
+            pooling_strategy=self.pooling_strategy,
+            padding_strategy=self.tokenizer.padding_side,
+            is_llm=self.is_llm)
 
         self.__cfg = {
             'model_name_or_path': model_name_or_path,
@@ -861,6 +871,7 @@ class AnglE:
     def encode(self,
                inputs: Union[List[str], Tuple[str], List[Dict], str],
                max_length: Optional[int] = None,
+               end_with_eos: bool = False,
                to_numpy: bool = True,
                device: Any = None):
         if device is None:
@@ -872,7 +883,26 @@ class AnglE:
             for i, obj in enumerate(inputs):
                 assert isinstance(obj, dict), 'The prompt has been set, please pass a dict like {"prompt_key": "text"}'
                 inputs[i] = self.prompt.format(**obj)
-        tok = self.tokenizer(inputs, padding='longest', max_length=max_length or self.max_length, truncation=True, return_tensors='pt')
+        max_length = max_length or self.max_length
+        if end_with_eos:
+            max_length -= 1
+
+        if end_with_eos:
+            tok = self.tokenizer(
+                inputs,
+                padding=False,
+                return_attention_mask=False,
+                max_length=max_length or self.max_length,
+                truncation=True)
+            tok['input_ids'] = [input_ids + [self.tokenizer.eos_token_id] for input_ids in tok['input_ids']]
+            tok = self.tokenizer.pad(tok, padding=True, return_attention_mask=True, return_tensors='pt')
+        else:
+            tok = self.tokenizer(
+                inputs,
+                padding='longest',
+                max_length=max_length or self.max_length,
+                truncation=True,
+                return_tensors='pt')
         tok.to(device)
         with torch.no_grad():
             output = self.pooler(tok)
