@@ -7,7 +7,7 @@ from ..utils import logger
 
 
 @add_start_docstrings(
-    "The BeLLM-version Mistral Model outputting raw hidden-states without any specific head on top.",
+    "The bare Mistral Model outputting raw hidden-states without any specific head on top.",
     MISTRAL_START_DOCSTRING,
 )
 class BeMistralModel(MistralPreTrainedModel):
@@ -19,7 +19,6 @@ class BeMistralModel(MistralPreTrainedModel):
     """
 
     def __init__(self, config: MistralConfig):
-        # config._flash_attn_2_enabled = True
         super().__init__(config)
         logger.info('This is BeLLM-version MistralModel!')
         self.padding_idx = config.pad_token_id
@@ -30,8 +29,12 @@ class BeMistralModel(MistralPreTrainedModel):
             self.start_bilayer_index = config.start_bilayer_index
         else:
             logger.info('Successfully set start_bilayer_index=0 by default')
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([MistralDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [MistralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self._attn_implementation = config._attn_implementation
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
@@ -81,12 +84,20 @@ class BeMistralModel(MistralPreTrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        seq_length_with_past = seq_length
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         past_key_values_length = 0
 
-        if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
+        if use_cache:
+            use_legacy_cache = not isinstance(past_key_values, Cache)
+            if use_legacy_cache:
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            past_key_values_length = past_key_values.get_usable_length(seq_length)
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -100,12 +111,7 @@ class BeMistralModel(MistralPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if (
-            attention_mask is not None
-            and hasattr(self.config, "_flash_attn_2_enabled")
-            and self.config._flash_attn_2_enabled
-            and use_cache
-        ):
+        if attention_mask is not None and self._attn_implementation == "flash_attention_2" and use_cache:
             is_padding_right = attention_mask[:, -1].sum().item() != batch_size
             if is_padding_right:
                 raise ValueError(
@@ -114,9 +120,18 @@ class BeMistralModel(MistralPreTrainedModel):
                     " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                 )
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._attn_implementation == "flash_attention_2":
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        elif self._attn_implementation == "sdpa" and not output_attentions:
+            # output_attentions=True can not be supported when using SDPA, and we fall back on
+            # the manual implementation that requires a 4D causal mask in all cases.
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask,
+                (batch_size, seq_length),
+                inputs_embeds,
+                past_key_values_length,
+            )
         else:
             # 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(
@@ -129,17 +144,10 @@ class BeMistralModel(MistralPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None
+        next_decoder_cache = None
 
         # LLM layers
         for idx, decoder_layer in enumerate(self.layers[:self.start_bilayer_index]):
@@ -228,7 +236,10 @@ class BeMistralModel(MistralPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
+        next_cache = None
+        if use_cache:
+            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
