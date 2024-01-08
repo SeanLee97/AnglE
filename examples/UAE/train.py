@@ -27,6 +27,7 @@ parser.add_argument('--w3', type=float, default=1.0, help='Specify w3 (angle), d
 parser.add_argument('--angle_tau', type=float, default=1.0, help='Specify angle_tau, default 1.0')
 parser.add_argument('--cosine_tau', type=float, default=20.0, help='Specify cosine_tau, defaut 20.0')
 parser.add_argument('--ibn_tau', type=float, default=20.0, help='Specify ibn_tau, defaut 20.0')
+parser.add_argument('--is_llm', type=int, default=0, choices=[0, 1], help='Specify is_llm, defaut 1')
 parser.add_argument('--apply_lora', type=int, default=0, choices=[0, 1], help='Specify apply_lora, defaut 0')
 parser.add_argument('--load_kbit', type=int, default=None, choices=[4, 8, 16], help='Specify load_kbit, default None')
 parser.add_argument('--lora_r', type=int, default=32, help='Specify lora_r, defaut 32')
@@ -66,6 +67,7 @@ model = AnglE(args.model_name,
               pretrained_lora_path=args.pretrained_lora_path,
               pooling_strategy=args.pooling_strategy,
               train_mode=True,
+              is_llm=args.is_llm,
               apply_lora=args.apply_lora,
               lora_config_kwargs={
                   'r': args.lora_r,

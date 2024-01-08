@@ -15,13 +15,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import bitsandbytes as bnb
 from tqdm import tqdm
 from boltons.iterutils import chunked_iter
 from datasets import Dataset
 from transformers import (
     AutoModelForCausalLM, AutoModel, AutoTokenizer,
     PreTrainedModel, Trainer, TrainingArguments,
-    TrainerCallback
+    TrainerCallback, BitsAndBytesConfig
 )
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import PaddingStrategy
@@ -42,6 +43,20 @@ def set_device():
     elif torch.backends.mps.is_available():
         return 'mps'
     return 'cpu'
+
+
+def find_all_linear_names(model: PreTrainedModel, linear_type: Optional[object] = None) -> List[str]:
+    if linear_type is None:
+        linear_type = nn.Linear
+    lora_module_names = set()
+    for name, module in model.named_modules():
+        if isinstance(module, linear_type):
+            names = name.split('.')
+            lora_module_names.add(names[0] if len(names) == 1 else names[-1])
+
+    if 'lm_head' in lora_module_names:
+        lora_module_names.remove('lm_head')
+    return list(lora_module_names)
 
 
 def categorical_crossentropy(y_true: torch.Tensor, y_pred: torch.Tensor, from_logits: bool = True):
@@ -529,21 +544,6 @@ class AnglE:
                 device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}       
             # LLM
             if self.apply_lora:
-                import bitsandbytes as bnb
-                from transformers import BitsAndBytesConfig
-
-                def find_all_linear_names(model):
-                    cls = bnb.nn.Linear4bit
-                    lora_module_names = set()
-                    for name, module in model.named_modules():
-                        if isinstance(module, cls):
-                            names = name.split('.')
-                            lora_module_names.add(names[0] if len(names) == 1 else names[-1])
-
-                    if 'lm_head' in lora_module_names:
-                        lora_module_names.remove('lm_head')
-                    return list(lora_module_names)
-
                 lora_config['bias'] = "none"
                 lora_config['task_type'] = TaskType.FEATURE_EXTRACTION if self.is_bellm else TaskType.CAUSAL_LM             
 
@@ -577,7 +577,7 @@ class AnglE:
                         )
                     elif train_mode:
                         if 'target_modules' not in lora_config or lora_config.get('target_modules', None) is None:
-                            target_modules = find_all_linear_names(model)
+                            target_modules = find_all_linear_names(model, linear_type=bnb.nn.Linear4bit)
                             lora_config['target_modules'] = target_modules
                             logger.info(f'lora target modules={target_modules}')
                         peft_config = LoraConfig(**lora_config)
@@ -657,6 +657,10 @@ class AnglE:
                         is_trainable=train_mode
                     )
                 else:
+                    if 'target_modules' not in lora_config or lora_config.get('target_modules', None) is None:
+                        target_modules = find_all_linear_names(model)
+                        lora_config['target_modules'] = target_modules
+                        logger.info(f'lora target modules={target_modules}')
                     peft_config = LoraConfig(**lora_config)
                     model = get_peft_model(model, peft_config)
                 self.backbone = model
