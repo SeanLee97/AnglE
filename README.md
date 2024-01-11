@@ -59,29 +59,7 @@
  
 💡 If the selected model is a LoRA weight, it must specify the corresponding dependent backbone.
 
-**📝 Training Details:**
-
-<details>
-<summary>1) SeanLee97/angle-llama-7b-nli-20231027</summary>
-
-We fine-tuned AnglE-LLaMA using 4 RTX 3090 Ti (24GB), the training script is as follows:
-
-```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=1234 train_angle.py \
---task NLI-STS --save_dir ckpts/NLI-STS-angle-llama-7b \
---w2 35 --learning_rate 2e-4 --maxlen 45 \
---lora_r 32 --lora_alpha 32 --lora_dropout 0.1 \
---save_steps 200 --batch_size 160 --seed 42 --do_eval 0 --load_kbit 4 --gradient_accumulation_steps 4 --epochs 1 
-```
-
-The evaluation script is as follows:
-
-```bash
-CUDA_VISIBLE_DEVICES=0,1 python eval.py \
-    --load_kbit 16 \
-    --model_name_or_path NousResearch/Llama-2-7b-hf \
-    --lora_weight SeanLee97/angle-llama-7b-nli-20231027
-```
+For our STS Experiment, please refer to https://github.com/SeanLee97/AnglE/tree/main/examples/NLI
 
 </details>
 
@@ -316,6 +294,7 @@ You are welcome to use our code and pre-trained models. If you use our code and 
 
 | 📅 | Description |
 |----|------|
+| 2024 Jan 11 |  refactor to support `angle-trainer` and BeLLM  |
 | 2023 Dec 4 |  Release a universal English sentence embedding model: [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1)  |
 | 2023 Nov 2 |  Release an English pretrained model: `SeanLee97/angle-llama-13b-nli` |
 | 2023 Oct 28 |  Release two chinese pretrained models: `SeanLee97/angle-roberta-wwm-base-zhnli-v1` and `SeanLee97/angle-llama-7b-zhnli-v1`; Add chinese README.md |
