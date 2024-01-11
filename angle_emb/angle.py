@@ -411,7 +411,7 @@ class Pooler:
             elif self.pooling_strategy == 'max':
                 outputs, _ = torch.max(outputs, dim=1)
             else:
-                raise NotImplementedError('please specify pooling_strategy from [`cls`, `last`, `avg`, `max`]')
+                raise NotImplementedError('please specify pooling_strategy from [`cls`, `last`, `avg`, `max`, `last_avg`]')
         return outputs
 
 
@@ -541,11 +541,11 @@ class AnglE:
             device_map = "auto"
             MODEL_CLASS = getattr(bellm, bellm_class_name) if self.is_bellm else AutoModelForCausalLM
             if train_mode and self.gpu_count > 1:
-                device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}       
+                device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
             # LLM
             if self.apply_lora:
                 lora_config['bias'] = "none"
-                lora_config['task_type'] = TaskType.FEATURE_EXTRACTION if self.is_bellm else TaskType.CAUSAL_LM             
+                lora_config['task_type'] = TaskType.FEATURE_EXTRACTION if self.is_bellm else TaskType.CAUSAL_LM
 
                 if load_kbit == 4:
                     model = MODEL_CLASS.from_pretrained(
@@ -563,7 +563,7 @@ class AnglE:
                         torch_dtype=torch.float32,
                         device_map=device_map,
                         trust_remote_code=True,
-                    )     
+                    )
                     if train_mode:
                         model = prepare_model_for_kbit_training(model, **kbit_kwargs)
                     if pretrained_lora_path is not None:
