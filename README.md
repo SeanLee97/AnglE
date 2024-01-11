@@ -241,34 +241,12 @@ vec = (hidden_state[:, 0] + torch.mean(hidden_state, dim=1)) / 2.0
 print(vec)
 ```
 
-## Train Custom AnglE Model
+## Custom Train
 
-### 1. Train NLI
+1) Use `angle-trainer` to train your AnglE model in cli mode. Usage: `CUDA_VISIBLE_DEVICES=0 angle-trainer --help`
 
-1) Prepare your gpu environment
 
-2) Install python dependencies
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-3) Download data
-
-- Download multi_nli + snli:
-
-```bash
-$ cd data
-$ sh download_data.sh
-```
-- Download sts datasets
-
-```bash
-$ cd SentEval/data/downstream
-$ bash download_dataset.sh
-```
-
-### 2. Custom Train
+2) Example
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1h28jHvv_x-0fZ0tItIMjf8rJGp3GcO5V?usp=sharing)
 
