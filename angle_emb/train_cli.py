@@ -149,7 +149,7 @@ def main():
 
     argument_kwargs = {}
     if args.push_to_hub:
-        assert args.hub_model_id is not None
+        assert args.hub_model_id is not None, 'Please specify hub_mode_id via --hub_model_id xxx'
         argument_kwargs['push_to_hub'] = True,
         argument_kwargs['hub_model_id'] = args.hub_model_id
     if args.wandb_project is not None:
