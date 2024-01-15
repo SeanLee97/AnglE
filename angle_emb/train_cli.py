@@ -81,8 +81,6 @@ parser.add_argument('--gradient_accumulation_steps', type=int, default=1, help='
 parser.add_argument('--torch_dtype', type=str, default=None, help='Specify torch_dtype, default 1')
 parser.add_argument('--fp16', type=bool, default=None, choices=[0, 1],
                     help='Specify fp16, choices [0, 1], default None')
-parser.add_argument('--compute_similar_matrix', type=int, default=1, choices=[0, 1],
-                    help='Specify compute_similar_matrix, choices=[0, 1], default 1')
 parser.add_argument('--push_to_hub', type=int, default=0, choices=[0, 1], help='Specify push_to_hub, default 0')
 parser.add_argument('--hub_model_id', type=str, default=None,
                     help='Specify push_to_hub_model_id, default None, format like organization/model_id')

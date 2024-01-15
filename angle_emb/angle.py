@@ -149,9 +149,9 @@ def in_batch_negative_loss(y_true: torch.Tensor,
     return categorical_crossentropy(y_true, similarities, from_logits=True).mean()
 
 
-def contrastive_with_negative_loss(query: torch.Tensor, pos: torch.Tensor, neg: Optional[torch.Tensor] = None, tau: float = 20.0):
+def contrastive_with_negative_loss(text: torch.Tensor, pos: torch.Tensor, neg: Optional[torch.Tensor] = None, tau: float = 20.0):
     target = torch.cat((pos, neg), dim=0)  if neg is not None else pos  # (2B, D)
-    q_norm = torch.nn.functional.normalize(query, p=2, dim=1)  # (B, D)
+    q_norm = torch.nn.functional.normalize(text, p=2, dim=1)  # (B, D)
     t_norm = torch.nn.functional.normalize(target, p=2, dim=1)  # (2B, D)
     scores = torch.mm(q_norm, t_norm.transpose(0, 1)) * tau # (B, 2B)
     labels = torch.tensor(
@@ -209,18 +209,18 @@ class DatasetFormats:
     A = 'text1,text2,label'
 
     '''
-    format B: query,positive,negative
+    format B: text,positive,negative
     input format: [
-        query[0],
+        text[0],
         positive[0],
         negative[0],
-        query[1],
+        text[1],
         positive[1],
         negative[1],
         ...
     ]
     '''
-    B = 'query,positive,negative'
+    B = 'text,positive,negative'
 
     @classmethod
     def list_formats(cls):
@@ -267,18 +267,22 @@ class AngleDataTokenizer:
         return token_ids[:len(token_ids) - len(to_fix_ids)] + to_fix_ids
 
     def __call__(self, data: Dict) -> Dict:
-        text_columns = None
         if self.dataset_format is None:
             if 'text1' in data and 'text2' in data and 'label' in data:
+                logger.info(f'Detect DatasetFormats.A: {DatasetFormats.A}')
                 self.dataset_format = DatasetFormats.A
-                text_columns = ['text1', 'text2']
-            elif 'query' in data and 'positive' in data and 'negative' in data:
+            elif 'text' in data and 'positive' in data and 'negative' in data:
                 self.dataset_format = DatasetFormats.B
-                text_columns = ['query', 'positive', 'negative']
+                logger.info(f'Detect DatasetFormats.B: {DatasetFormats.B}')
             else:
                 raise NotImplementedError('Currently only support two dataset formats'
                                           'DatasetFormats A: must include three columns: `text1`, `text2`, and `label`.'
-                                          'DatasetFormats B: mut include three columns: `query`, `positive`, `negative`')
+                                          'DatasetFormats B: mut include three columns: `text`, `positive`, `negative`')
+        text_columns = None
+        if self.dataset_format == DatasetFormats.A:
+            text_columns = ['text1', 'text2']
+        elif self.dataset_format == DatasetFormats.B:
+            text_columns = ['text', 'positive', 'negative']
 
         extra_length = 0
         extra_placeholder = {}
@@ -365,7 +369,7 @@ class AngleDataCollator:
 
             max_seperate_id = max(seperate_ids)
             prev_start_idx = 0
-            for start_idx in range(1, max_seperate_id):
+            for start_idx in range(1, max_seperate_id + 1):
                 start_idx = seperate_ids.index(start_idx)
 
                 new_feature = {}
@@ -512,14 +516,14 @@ class AngleLoss:
             if self.w3 > 0:
                 loss += self.w3 * angle_loss(labels, outputs, self.angle_tau)
         elif self.dataset_format == DatasetFormats.B:
-            # query,positive,negative
-            query = outputs[::3]
+            # text,positive,negative
+            text = outputs[::3]
             positive = outputs[1::3]
             negative = outputs[2::3]
-
-            positive_inputs = torch.cat((query, positive), dim=0)
+            assert text.shape == positive.shape == negative.shape, f'text.shape={text.shape}, postive.shape={positive.shape}, negative.shape={negative.shape}'  # NOQA
+            positive_inputs = torch.cat((text, positive), dim=0)
             positive_labels = torch.ones_like(positive_inputs[:, :1]).long()
-            negative_inputs = torch.cat((query, negative), dim=0)
+            negative_inputs = torch.cat((text, negative), dim=0)
             negative_labels = torch.zeros_like(negative_inputs[:, :1]).long()
             combined_inputs = torch.cat((positive_inputs, negative_inputs), dim=0)
             combined_labels = torch.cat((positive_labels, negative_labels), dim=0)
@@ -528,7 +532,7 @@ class AngleLoss:
             if self.w1 > 0:
                 loss += self.w1 * cosine_loss(combined_labels, combined_inputs, self.cosine_tau)
             if self.w2 > 0:
-                loss += self.w2 * contrastive_with_negative_loss(query, positive, negative, tau=self.ibn_tau)
+                loss += self.w2 * contrastive_with_negative_loss(text, positive, negative, tau=self.ibn_tau)
             if self.w3 > 0:
                 loss += self.w3 * angle_loss(combined_labels, combined_inputs, self.angle_tau)
         else:
