@@ -72,7 +72,7 @@ parser.add_argument('--warmup_steps', type=int, default=100,
 parser.add_argument('--logging_steps', type=int, default=100,
                     help='Specify logging_steps, defaut 100')
 parser.add_argument('--pooling_strategy', type=str, default='cls',
-                    help='Specify pooling_strategy from [`cls`, `last`, `avg`, `cls_avg`, `max`]')
+                    help='Specify pooling_strategy from [`cls`, `last`, `avg`, `cls_avg`, `max`], default `cls`')
 parser.add_argument('--epochs', type=int, default=20, help='Specify epochs, default 20')
 parser.add_argument('--save_steps', type=int, default=100, help='Specify save_steps, default 1000')
 parser.add_argument('--batch_size', type=int, default=32, help='Specify batch size, default 32')
