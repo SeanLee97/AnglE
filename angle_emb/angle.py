@@ -5,8 +5,7 @@ import re
 import sys
 import json
 from functools import partial
-from typing import Any, Dict, Optional, List, Union, Tuple, Iterator, Callable
-from collections import defaultdict
+from typing import Any, Dict, Optional, List, Union, Tuple, Callable
 from dataclasses import dataclass
 
 import scipy
@@ -113,7 +112,6 @@ def angle_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 1.0):
 def in_batch_negative_loss(y_true: torch.Tensor,
                            y_pred: torch.Tensor,
                            tau: float = 20.0,
-                           similar_matrix: Optional[torch.Tensor] = None,
                            negative_weights: float = 0.0):
     """in-batch negative loss
     """
@@ -137,8 +135,6 @@ def in_batch_negative_loss(y_true: torch.Tensor,
     neg_mask = make_target_matrix(y_true == 0)
 
     y_true = make_target_matrix(y_true)
-    if similar_matrix is not None:
-        y_true += similar_matrix
 
     # compute similarity
     y_pred = F.normalize(y_pred, dim=1, p=2)
@@ -150,6 +146,17 @@ def in_batch_negative_loss(y_true: torch.Tensor,
         similarities += neg_mask * negative_weights
 
     return categorical_crossentropy(y_true, similarities, from_logits=True).mean()
+
+
+def contrastive_with_negative_loss(text: torch.Tensor, pos: torch.Tensor, neg: Optional[torch.Tensor] = None, tau: float = 20.0):
+    target = torch.cat((pos, neg), dim=0)  if neg is not None else pos  # (2B, D)
+    q_norm = torch.nn.functional.normalize(text, p=2, dim=1)  # (B, D)
+    t_norm = torch.nn.functional.normalize(target, p=2, dim=1)  # (2B, D)
+    scores = torch.mm(q_norm, t_norm.transpose(0, 1)) * tau  # (B, 2B)
+    labels = torch.tensor(
+        range(len(scores)), dtype=torch.long, device=scores.device
+    )
+    return nn.CrossEntropyLoss()(scores, labels)
 
 
 def compute_corrcoef(x, y):
@@ -180,34 +187,46 @@ class Prompts:
             print(f'Prompts.{key}', '=', f"'{val}'")
 
 
-class AngleLoss:
-    def __init__(self,
-                 w1: float = 1.0,
-                 w2: float = 1.0,
-                 w3: float = 1.0,
-                 cosine_tau: float = 20.0,
-                 ibn_tau: float = 20.0,
-                 angle_tau: float = 1.0,
-                 **kwargs):
-        self.w1 = w1
-        self.w2 = w2
-        self.w3 = w3
-        self.cosine_tau = cosine_tau
-        self.ibn_tau = ibn_tau
-        self.angle_tau = angle_tau
+class DatasetFormats:
+    '''
+    format A: text1,text2,label
+    input format: [
+        text1[0],
+        text2[0],
+        text1[1],
+        text2[1],
+        ...
+    ]
+    label format: [
+        label[0],
+        label[0],
+        label[1],
+        label[1],
+        ...
+    ]
+    '''
+    A = 'text1,text2,label'
 
-    def __call__(self,
-                 y_true: torch.Tensor,
-                 y_pred: torch.Tensor,
-                 similar_matrix: Optional[torch.Tensor] = None) -> torch.Tensor:
-        loss = 0.
-        if self.w1 > 0:
-            loss += self.w1 * cosine_loss(y_true, y_pred, self.cosine_tau)
-        if self.w2 > 0:
-            loss += self.w2 * in_batch_negative_loss(y_true, y_pred, self.ibn_tau, similar_matrix=similar_matrix)
-        if self.w3 > 0:
-            loss += self.w3 * angle_loss(y_true, y_pred, self.angle_tau)
-        return loss
+    '''
+    format B: text,positive,negative
+    input format: [
+        text[0],
+        positive[0],
+        negative[0],
+        text[1],
+        positive[1],
+        negative[1],
+        ...
+    ]
+    '''
+    B = 'text,positive,negative'
+
+    @classmethod
+    def list_formats(cls):
+        for key, val in DatasetFormats.__dict__.items():
+            if key.startswith('_') or key == 'list_formats':
+                continue
+            print(f'DatasetFormats.{key}', '=', f"'{val}'")
 
 
 class AngleDataTokenizer:
@@ -216,12 +235,16 @@ class AngleDataTokenizer:
                  max_length: Optional[int] = None,
                  prompt_template: Optional[str] = None,
                  template_placeholders: Optional[List[str]] = None,
-                 extra_columns: Optional[List[str]] = None):
+                 extra_columns: Optional[List[str]] = None,
+                 dataset_format: Optional[str] = None,
+                 end_with_eos: bool = False):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.prompt_template = prompt_template
         self.prompt_template_tok = None
         self.extra_columns = extra_columns
+        self.dataset_format = dataset_format
+        self.end_with_eos = end_with_eos
         if template_placeholders is None:
             template_placeholders = ['condition', 'text']
         if prompt_template is not None:
@@ -243,6 +266,23 @@ class AngleDataTokenizer:
         return token_ids[:len(token_ids) - len(to_fix_ids)] + to_fix_ids
 
     def __call__(self, data: Dict) -> Dict:
+        if self.dataset_format is None:
+            if 'text1' in data and 'text2' in data and 'label' in data:
+                logger.info(f'Detect DatasetFormats.A: {DatasetFormats.A}')
+                self.dataset_format = DatasetFormats.A
+            elif 'text' in data and 'positive' in data and 'negative' in data:
+                self.dataset_format = DatasetFormats.B
+                logger.info(f'Detect DatasetFormats.B: {DatasetFormats.B}')
+            else:
+                raise NotImplementedError('Currently only support two dataset formats'
+                                          'DatasetFormats A: must include three columns: `text1`, `text2`, and `label`.'
+                                          'DatasetFormats B: mut include three columns: `text`, `positive`, `negative`')
+        text_columns = None
+        if self.dataset_format == DatasetFormats.A:
+            text_columns = ['text1', 'text2']
+        elif self.dataset_format == DatasetFormats.B:
+            text_columns = ['text', 'positive', 'negative']
+
         extra_length = 0
         extra_placeholder = {}
         if self.extra_columns is not None:
@@ -251,49 +291,53 @@ class AngleDataTokenizer:
                     continue
                 extra_placeholder[key] = val
                 extra_length += len(self.tokenizer(val, add_special_tokens=False)['input_ids'])
-        if self.prompt_template_tok is not None:
-            tok1 = self.tokenizer(data['text1'],
-                                  max_length=self.max_length - len(self.prompt_template_tok['input_ids']) - extra_length,
-                                  truncation=True,
-                                  add_special_tokens=False)
-            data['text1'] = self.tokenizer.decode(tok1['input_ids'])
-            data['text1'] = self.prompt_template.format(text=data['text1'], **extra_placeholder)
-            tok2 = self.tokenizer(data['text2'],
-                                  max_length=self.max_length - len(self.prompt_template_tok['input_ids']) - extra_length,
-                                  truncation=True,
-                                  add_special_tokens=False)
-            data['text2'] = self.tokenizer.decode(tok2['input_ids'])
-            data['text2'] = self.prompt_template.format(text=data['text2'], **extra_placeholder)
+        if self.end_with_eos:
+            extra_length += 1
 
-        tok1 = self.tokenizer(data['text1'], max_length=self.max_length, truncation=True)
-        tok2 = self.tokenizer(data['text2'], max_length=self.max_length, truncation=True)
         if self.prompt_template_tok is not None:
-            if tok1['input_ids'][-1] != self.prompt_template_tok['input_ids'][-1]:
-                print('bad data:', f"token ids: {tok1['input_ids']}, prompt token ids: {self.prompt_template_tok['input_ids']}")
-                tok1['input_ids'] = self.fix_bad_data(tok1['input_ids'], self.prompt_template_tok['input_ids'])
-                try:
-                    assert len(tok1['input_ids']) == len(tok1['attention_mask'])
-                    assert tok1['input_ids'][-1] == self.prompt_template_tok['input_ids'][-1]
-                    print('fixed it ;)')
-                    print('new data:', f"token ids: {tok1['input_ids']}, prompt token ids: {self.prompt_template_tok['input_ids']}")
-                except AssertionError:
-                    print('failed to fix it :()')
-            if tok2['input_ids'][-1] != self.prompt_template_tok['input_ids'][-1]:
-                print('bad data:', f"token ids: {tok2['input_ids']}, prompt token ids: {self.prompt_template_tok['input_ids']}")
-                tok2['input_ids'] = self.fix_bad_data(tok2['input_ids'], self.prompt_template_tok['input_ids'])
-                try:
-                    assert len(tok2['input_ids']) == len(tok2['attention_mask'])
-                    assert tok2['input_ids'][-1] == self.prompt_template_tok['input_ids'][-1]
-                    print('fixed it ;)')
-                    print('new data:', f"token ids: {tok2['input_ids']}, prompt token ids: {self.prompt_template_tok['input_ids']}")
-                except AssertionError:
-                    print('failed to fix it :()')
-        tok = {}
-        for key, val in tok1.items():
-            tok[key] = val + tok2[key]
-        tok['labels'] = [int(data['label'])]
-        tok['seperate_ids'] = [0] * len(tok1['input_ids']) + [1] * len(tok2['input_ids'])
-        return tok
+            for text_column in text_columns:
+                tok = self.tokenizer(data[text_column],
+                                     max_length=self.max_length - len(self.prompt_template_tok['input_ids']) - extra_length,
+                                     truncation=True,
+                                     add_special_tokens=False)
+                data[text_column] = self.tokenizer.decode(tok['input_ids'])
+                data[text_column] = self.prompt_template.format(text=data[text_column], **extra_placeholder)
+
+        toks = []
+        for text_column in text_columns:
+            toks.append(self.tokenizer(data[text_column], max_length=self.max_length, truncation=True))
+
+        if self.prompt_template_tok is not None:
+            for tok in toks:
+                if tok['input_ids'][-1] != self.prompt_template_tok['input_ids'][-1]:
+                    print('bad data:', f"token ids: {tok['input_ids']}, prompt token ids: {self.prompt_template_tok['input_ids']}")
+                    tok['input_ids'] = self.fix_bad_data(tok['input_ids'], self.prompt_template_tok['input_ids'])
+                    try:
+                        assert len(tok['input_ids']) == len(tok['attention_mask'])
+                        assert tok['input_ids'][-1] == self.prompt_template_tok['input_ids'][-1]
+                        print('fixed it ;)')
+                        print('new data:', f"token ids: {tok['input_ids']}, prompt token ids: {self.prompt_template_tok['input_ids']}")
+                    except AssertionError:
+                        print('failed to fix it :()')
+
+        combined_tok = {}
+        seperate_ids = []
+        for idx, tok in enumerate(toks):
+            for key, val in tok.items():
+                if idx == 0:
+                    combined_tok[key] = val
+                else:
+                    combined_tok[key] += val
+                if key == 'input_ids':
+                    seperate_ids += [idx] * len(val)
+
+        combined_tok['labels'] = [int(data['label']) if 'label' in data else -1]
+        combined_tok['seperate_ids'] = seperate_ids
+        combined_tok['extra'] = {
+            'dataset_format': self.dataset_format,
+            'end_with_eos': self.end_with_eos
+        }
+        return combined_tok
 
 
 @dataclass
@@ -301,62 +345,70 @@ class AngleDataCollator:
     tokenizer: PreTrainedTokenizerBase
     padding: Union[bool, str, PaddingStrategy] = 'longest'
     max_length: Optional[int] = None
-    compute_similar_matrix: bool = True
     return_tensors: str = "pt"
 
     def __call__(self, features: List[Dict], return_tensors: str = "pt") -> Dict[str, torch.Tensor]:
         if return_tensors is None:
             return_tensors = self.return_tensors
         has_token_type_ids = "token_type_ids" in features[0]
+        end_with_eos = features[0]['extra']['end_with_eos']
+
         new_features = []
-        batch_text_set = defaultdict(list)
-        for i, feature in enumerate(features, 1):
+        for feature in features:
             seperate_ids = feature['seperate_ids']
             input_ids = feature['input_ids']
             attention_mask = feature['attention_mask']
             assert len(seperate_ids) == len(input_ids) == len(attention_mask)
+
             has_token_type_ids = False
             if "token_type_ids" in feature:
                 has_token_type_ids = True
                 token_type_ids = feature['token_type_ids']
                 assert len(token_type_ids) == len(input_ids)
-            first_one_idx = seperate_ids.index(1)
+
+            max_seperate_id = max(seperate_ids)
+            prev_start_idx = 0
+            for start_idx in range(1, max_seperate_id + 1):
+                start_idx = seperate_ids.index(start_idx)
+
+                new_feature = {}
+                new_feature['input_ids'] = input_ids[prev_start_idx:start_idx]
+                new_feature['attention_mask'] = attention_mask[prev_start_idx:start_idx]
+                if has_token_type_ids:
+                    new_feature['token_type_ids'] = token_type_ids[prev_start_idx:start_idx]
+                new_feature['labels'] = feature['labels']
+                new_features.append(new_feature)
+                prev_start_idx = start_idx
+
+            # last
             new_feature = {}
-            new_feature['input_ids'] = input_ids[:first_one_idx]
-            new_feature['attention_mask'] = attention_mask[:first_one_idx]
+            new_feature['input_ids'] = input_ids[prev_start_idx:]
+            new_feature['attention_mask'] = attention_mask[prev_start_idx:]
             if has_token_type_ids:
-                new_feature['token_type_ids'] = token_type_ids[:first_one_idx]
+                new_feature['token_type_ids'] = token_type_ids[prev_start_idx:]
             new_feature['labels'] = feature['labels']
             new_features.append(new_feature)
-            batch_text_set[tuple(new_feature['input_ids'])].append(2 * (i - 1))
 
-            new_feature = {}
-            new_feature['input_ids'] = input_ids[first_one_idx:]
-            new_feature['attention_mask'] = attention_mask[first_one_idx:]
-            if has_token_type_ids:
-                new_feature['token_type_ids'] = token_type_ids[first_one_idx:]
-            new_feature['labels'] = feature['labels']
-            new_features.append(new_feature)
-            batch_text_set[tuple(new_feature['input_ids'])].append(2 * (i - 1) + 1)
-
-        similar_matrix = np.zeros((len(new_features), len(new_features)))
-        if self.compute_similar_matrix:
-            for _, ids in batch_text_set.items():
-                if ids:
-                    for i in ids:
-                        for j in ids:
-                            if i == j:
-                                continue
-                            similar_matrix[i, j] = 1.0
         # remove features
         del features
 
-        features = self.tokenizer.pad(
-            {'input_ids': [feature['input_ids'] for feature in new_features]},
-            padding=self.padding,
-            max_length=self.max_length,
-            return_tensors=return_tensors,
-        )
+        if end_with_eos:
+            features = self.tokenizer.pad(
+                {'input_ids': [feature['input_ids'] for feature in new_features]},
+                padding=False,
+                max_length=self.max_length - 1,
+                return_tensors=return_tensors,
+                truncation=True,
+            )
+            features['input_ids'] = [input_ids + [self.tokenizer.eos_token_id] for input_ids in features['input_ids']]
+            features = self.tokenizer.pad(features, padding=self.padding, return_tensors=return_tensors)
+        else:
+            features = self.tokenizer.pad(
+                {'input_ids': [feature['input_ids'] for feature in new_features]},
+                padding=self.padding,
+                max_length=self.max_length,
+                return_tensors=return_tensors,
+            )
         features['attention_mask'] = self.tokenizer.pad(
             {'input_ids': [feature['attention_mask'] for feature in new_features]},
             padding=self.padding,
@@ -371,7 +423,6 @@ class AngleDataCollator:
                 return_tensors=return_tensors,
             )['input_ids']
         features['labels'] = torch.Tensor([feature['labels'] for feature in new_features])
-        features['similar_matrix'] = torch.Tensor(similar_matrix)
 
         return features
 
@@ -419,19 +470,73 @@ class AngleTrainer(Trainer):
     def __init__(self,
                  pooler: Pooler,
                  loss_kwargs: Optional[Dict] = None,
+                 dataset_format: str = DatasetFormats.A,
                  **kwargs):
         super().__init__(**kwargs)
         self.pooler = pooler
         if loss_kwargs is None:
             loss_kwargs = {}
-        self.loss_fct = AngleLoss(**loss_kwargs)
+        self.loss_fct = AngleLoss(dataset_format=dataset_format, **loss_kwargs)
 
     def compute_loss(self, model, inputs, return_outputs=False):
-        labels = inputs.pop("labels")
-        similar_matrix = inputs.pop("similar_matrix", None)
+        labels = inputs.pop("labels", None)
         outputs = self.pooler(inputs)
-        loss = self.loss_fct(labels, outputs, similar_matrix=similar_matrix)
+        loss = self.loss_fct(labels, outputs)
         return (loss, outputs) if return_outputs else loss
+
+
+class AngleLoss:
+    def __init__(self,
+                 w1: float = 1.0,
+                 w2: float = 1.0,
+                 w3: float = 1.0,
+                 cosine_tau: float = 20.0,
+                 ibn_tau: float = 20.0,
+                 angle_tau: float = 1.0,
+                 dataset_format: Optional[str] = None,
+                 **kwargs):
+        self.w1 = w1
+        self.w2 = w2
+        self.w3 = w3
+        self.cosine_tau = cosine_tau
+        self.ibn_tau = ibn_tau
+        self.angle_tau = angle_tau
+        self.dataset_format = dataset_format
+
+    def __call__(self,
+                 labels: torch.Tensor,
+                 outputs: torch.Tensor) -> torch.Tensor:
+        if self.dataset_format == DatasetFormats.A:
+            loss = 0.
+            if self.w1 > 0:
+                loss += self.w1 * cosine_loss(labels, outputs, self.cosine_tau)
+            if self.w2 > 0:
+                loss += self.w2 * in_batch_negative_loss(labels, outputs, self.ibn_tau)
+            if self.w3 > 0:
+                loss += self.w3 * angle_loss(labels, outputs, self.angle_tau)
+        elif self.dataset_format == DatasetFormats.B:
+            # text,positive,negative
+            text = outputs[::3]
+            positive = outputs[1::3]
+            negative = outputs[2::3]
+            assert text.shape == positive.shape == negative.shape, f'text.shape={text.shape}, postive.shape={positive.shape}, negative.shape={negative.shape}'  # NOQA
+            positive_inputs = torch.cat((text, positive), dim=0)
+            positive_labels = torch.ones_like(positive_inputs[:, :1]).long()
+            negative_inputs = torch.cat((text, negative), dim=0)
+            negative_labels = torch.zeros_like(negative_inputs[:, :1]).long()
+            combined_inputs = torch.cat((positive_inputs, negative_inputs), dim=0)
+            combined_labels = torch.cat((positive_labels, negative_labels), dim=0)
+
+            loss = 0.
+            if self.w1 > 0:
+                loss += self.w1 * cosine_loss(combined_labels, combined_inputs, self.cosine_tau)
+            if self.w2 > 0:
+                loss += self.w2 * contrastive_with_negative_loss(text, positive, negative, tau=self.ibn_tau)
+            if self.w3 > 0:
+                loss += self.w3 * angle_loss(combined_labels, combined_inputs, self.angle_tau)
+        else:
+            raise NotImplementedError
+        return loss
 
 
 class EvaluateCallback(TrainerCallback):
@@ -755,10 +860,13 @@ class AnglE:
         with open(fpath, 'w', encoding='utf-8') as writer:
             json.dump(self.__cfg, writer, ensure_ascii=False, indent=2)
 
+    def detect_dataset_format(self, ds: Dataset):
+        for obj in ds:
+            return obj['extra']['dataset_format']
+
     def fit(self,
-            train_ds: Iterator,
-            valid_ds: Optional[Iterator] = None,
-            compute_similar_matrix: bool = True,
+            train_ds: Dataset,
+            valid_ds: Optional[Dataset] = None,
             batch_size: int = 32,
             output_dir: Optional[str] = None,
             epochs: int = 1,
@@ -773,11 +881,10 @@ class AnglE:
             fp16: Optional[bool] = None,
             argument_kwargs: Optional[Dict] = None,
             trainer_kwargs: Optional[Dict] = None,
-            loss_kwargs: Optional[Dict] = None,):
+            loss_kwargs: Optional[Dict] = None):
         if output_dir is not None:
             os.makedirs(output_dir, exist_ok=True)
         # save config
-        self.__cfg['compute_similar_matrix'] = compute_similar_matrix
         self.save_config(os.path.join(output_dir, AnglE.cfg_file_name))
 
         if self.gpu_count > 1:
@@ -802,6 +909,7 @@ class AnglE:
         trainer = AngleTrainer(
             pooler=self.pooler,
             model=self.backbone,
+            dataset_format=self.detect_dataset_format(train_ds),
             train_dataset=train_ds,
             eval_dataset=None,
             loss_kwargs=loss_kwargs,
@@ -821,12 +929,12 @@ class AnglE:
                 save_total_limit=save_total_limit,
                 load_best_model_at_end=False,
                 ddp_find_unused_parameters=False if self.gpu_count > 1 else None,
-                label_names=['labels', 'seperate_ids', 'similar_matrix'],
+                label_names=['labels', 'seperate_ids', 'extra'],
                 **argument_kwargs,
             ),
             callbacks=callbacks,
             data_collator=AngleDataCollator(
-                self.tokenizer, return_tensors="pt", max_length=self.max_length, compute_similar_matrix=compute_similar_matrix
+                self.tokenizer, return_tensors="pt", max_length=self.max_length
             ),
             **trainer_kwargs
         )
@@ -842,13 +950,11 @@ class AnglE:
             self.tokenizer,
             return_tensors="pt",
             max_length=self.max_length,
-            compute_similar_matrix=False
         )
         y_trues, y_preds = [], []
         # for X, y in data.make_iter(random=False):
         for features in tqdm(chunked_iter(data, batch_size), desc='Evaluate'):
             X = data_collator(features)
-            X.pop('similar_matrix', None)
             y = X.pop('labels', None)
             y_trues.extend(y[::2, 0].detach().cpu().numpy())
             with torch.no_grad():
