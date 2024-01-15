@@ -522,9 +522,9 @@ class AngleLoss:
             assert text.shape == positive.shape == negative.shape, f'text.shape={text.shape}, postive.shape={positive.shape}, negative.shape={negative.shape}'  # NOQA
 
             _, fea_dim = text.shape
-            positive_inputs = torch.stack((text, positive), dim=1).reshape(-1, fea_dim)  # zip
+            positive_inputs = torch.stack((text, positive), dim=1).reshape(-1, fea_dim)  # zip(text, positive)
             positive_labels = torch.ones_like(positive_inputs[:, :1]).long()
-            negative_inputs = torch.stack((text, negative), dim=1).reshape(-1, fea_dim)  # zip
+            negative_inputs = torch.stack((text, negative), dim=1).reshape(-1, fea_dim)  # zip(text, negative)
             negative_labels = torch.zeros_like(negative_inputs[:, :1]).long()
             combined_inputs = torch.cat((positive_inputs, negative_inputs), dim=0)
             combined_labels = torch.cat((positive_labels, negative_labels), dim=0)
