@@ -5,8 +5,7 @@ import re
 import sys
 import json
 from functools import partial
-from typing import Any, Dict, Optional, List, Union, Tuple, Iterator, Callable
-from collections import defaultdict
+from typing import Any, Dict, Optional, List, Union, Tuple, Callable
 from dataclasses import dataclass
 
 import scipy
@@ -153,7 +152,7 @@ def contrastive_with_negative_loss(text: torch.Tensor, pos: torch.Tensor, neg: O
     target = torch.cat((pos, neg), dim=0)  if neg is not None else pos  # (2B, D)
     q_norm = torch.nn.functional.normalize(text, p=2, dim=1)  # (B, D)
     t_norm = torch.nn.functional.normalize(target, p=2, dim=1)  # (2B, D)
-    scores = torch.mm(q_norm, t_norm.transpose(0, 1)) * tau # (B, 2B)
+    scores = torch.mm(q_norm, t_norm.transpose(0, 1)) * tau  # (B, 2B)
     labels = torch.tensor(
         range(len(scores)), dtype=torch.long, device=scores.device
     )
