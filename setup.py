@@ -16,7 +16,7 @@ with open('dev-requirements.txt', encoding='utf-8') as f:
 
 setup(
     name='angle_emb',
-    version='0.3.0',
+    version='0.3.1',
     description='AnglE-optimize Text Embeddings',
     long_description=readme,
     long_description_content_type="text/markdown",
