@@ -7,10 +7,14 @@ import random
 import numpy as np
 import torch
 from datasets import load_dataset
+
 from angle_emb import AnglE, AngleDataTokenizer
+from angle_emb.utils import logger
 
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--model_name_or_path', type=str, default='roberta-large',
+                    help='Specify model_name_or_path to set transformer backbone, default roberta-large')
 parser.add_argument('--pretrained_model_path', type=str, default=None,
                     help='Specify pretrained model path to load pretrained model, default None')
 parser.add_argument('--pretrained_lora_path', type=str, default=None,
@@ -20,7 +24,11 @@ parser.add_argument('--bellm_class_name', type=str, default=None,
 parser.add_argument('--train_name_or_path', type=str, required=True,
                     help='Specify huggingface datasets name or local file path for train set, required')
 parser.add_argument('--train_subset_name', type=str, default=None,
-                    help='Specify huggingface datasets subset name for train set, required')
+                    help='Specify huggingface datasets subset name for train set')
+parser.add_argument('--train_split_name', type=str, default='train',
+                    help='Specify huggingface datasets split name for train set, Default `train`')
+parser.add_argument('--valid_split_name', type=str, default=None,
+                    help='Specify huggingface datasets split name for valid set, Default None')
 parser.add_argument('--prompt_template', type=str, default=None,
                     help='Specify prompt_template like "Instruct: xxx\nInput: {text}", default None')
 parser.add_argument('--save_dir', type=str, default=None,
@@ -64,7 +72,7 @@ parser.add_argument('--warmup_steps', type=int, default=100,
 parser.add_argument('--logging_steps', type=int, default=100,
                     help='Specify logging_steps, defaut 100')
 parser.add_argument('--pooling_strategy', type=str, default='cls',
-                    help='Specify pooling_strategy from [`cls`, `last`, `avg`, `cls_avg`, `max`]')
+                    help='Specify pooling_strategy from [`cls`, `last`, `avg`, `cls_avg`, `max`], default `cls`')
 parser.add_argument('--epochs', type=int, default=20, help='Specify epochs, default 20')
 parser.add_argument('--save_steps', type=int, default=100, help='Specify save_steps, default 1000')
 parser.add_argument('--batch_size', type=int, default=32, help='Specify batch size, default 32')
@@ -78,16 +86,26 @@ parser.add_argument('--compute_similar_matrix', type=int, default=1, choices=[0,
 parser.add_argument('--push_to_hub', type=int, default=0, choices=[0, 1], help='Specify push_to_hub, default 0')
 parser.add_argument('--hub_model_id', type=str, default=None,
                     help='Specify push_to_hub_model_id, default None, format like organization/model_id')
-parser.add_argument('--model_name_or_path', type=str, default='roberta-large',
-                    help='Specify model_name_or_path to set transformer backbone, default roberta-large')
+# configure wandb
+parser.add_argument('--wandb_project', type=str, default=None, help='Specify WANDB_PROJECT, default None')
+parser.add_argument('--wandb_log_model', type=str, default=None, help='Specify WANDB_LOG_MODEL, default None')
 args = parser.parse_args()
-print('Args:', args)
+logger.info(f'Args: {args}')
 
 if args.seed is not None and args.seed > 0:
     os.environ['PYTHONHASHSEED'] = str(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+
+if args.wandb_project is not None:
+    import wandb
+
+    logger.info('Set up wandb...')
+    os.environ['WANDB_PROJECT'] = args.wandb_project
+    os.environ['WANDB_LOG_MODEL'] = args.wandb_log_model
+
+    wandb.login()
 
 
 def main():
@@ -118,18 +136,28 @@ def main():
     else:
         ds = load_dataset(args.train_name_or_path, args.train_subset_name)
 
+    logger.info('Dataset overview:')
     print(ds)
-    train_ds = ds['train'].shuffle(args.dataset_seed).map(
+    logger.info('Processing train...')
+    train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
         AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template), num_proc=args.workers)
+    valid_ds = None
+    if args.valid_split_name is not None:
+        logger.info('Validation detected, processing validation...')
+        valid_ds = ds[args.valid_split_name].shuffle(args.dataset_seed).map(
+            AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template), num_proc=args.workers)
 
     argument_kwargs = {}
     if args.push_to_hub:
-        assert args.hub_model_id is not None
+        assert args.hub_model_id is not None, 'Please specify hub_mode_id via --hub_model_id xxx'
         argument_kwargs['push_to_hub'] = True,
         argument_kwargs['hub_model_id'] = args.hub_model_id
+    if args.wandb_project is not None:
+        argument_kwargs['report_to'] = 'wandb'
 
     model.fit(
         train_ds=train_ds,
+        valid_ds=valid_ds,
         output_dir=args.save_dir,
         batch_size=args.batch_size,
         epochs=args.epochs,
