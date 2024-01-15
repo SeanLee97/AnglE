@@ -221,10 +221,22 @@ print(vec)
 
 ## Custom Train
 
-1) Use `angle-trainer` to train your AnglE model in cli mode. Usage: `CUDA_VISIBLE_DEVICES=0 angle-trainer --help`
+### 1. Data Prepation
+
+We support two dataset formats:
+
+1) `DatasetFormats.A`: it is a pair format with three columns: `text1`, `text2`, and `label` (0/1).
+
+2) `DatasetFormats.B`: it is a triple format with three columns: `text`, `positive`, and `negative`. `positive` and `negative` store the positive and negative samples of `text`.
+
+You need to prepare your data into huggingface `datasets.Dataset` in one of the formats in terms of your supervised data.
+
+### 2. Train
+
+Use `angle-trainer` to train your AnglE model in cli mode. Usage: `CUDA_VISIBLE_DEVICES=0 angle-trainer --help`
 
 
-2) Example
+### 3. Example
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1h28jHvv_x-0fZ0tItIMjf8rJGp3GcO5V?usp=sharing)
 
