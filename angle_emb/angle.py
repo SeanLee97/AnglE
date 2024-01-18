@@ -149,7 +149,7 @@ def in_batch_negative_loss(y_true: torch.Tensor,
 
 
 def contrastive_with_negative_loss(text: torch.Tensor, pos: torch.Tensor, neg: Optional[torch.Tensor] = None, tau: float = 20.0):
-    target = torch.cat((pos, neg), dim=0)  if neg is not None else pos  # (2B, D)
+    target = torch.cat((pos, neg), dim=0) if neg is not None else pos  # (2B, D)
     q_norm = torch.nn.functional.normalize(text, p=2, dim=1)  # (B, D)
     t_norm = torch.nn.functional.normalize(target, p=2, dim=1)  # (2B, D)
     scores = torch.mm(q_norm, t_norm.transpose(0, 1)) * tau  # (B, 2B)
@@ -368,8 +368,8 @@ class AngleDataCollator:
 
             max_seperate_id = max(seperate_ids)
             prev_start_idx = 0
-            for start_idx in range(1, max_seperate_id + 1):
-                start_idx = seperate_ids.index(start_idx)
+            for seperate_id in range(1, max_seperate_id + 1):
+                start_idx = seperate_ids.index(seperate_id)
 
                 new_feature = {}
                 new_feature['input_ids'] = input_ids[prev_start_idx:start_idx]
@@ -458,9 +458,10 @@ class Pooler:
             elif self.pooling_strategy == 'last':
                 outputs = outputs[torch.arange(batch_size, device=outputs.device), sequence_lengths]
             elif self.pooling_strategy == 'avg':
-                outputs = torch.mean(outputs, dim=1)
+                outputs = torch.sum(outputs * inputs["attention_mask"][:, :, None], dim=1) / torch.sum(inputs["attention_mask"])
+                # outputs = torch.mean(outputs, dim=1)
             elif self.pooling_strategy == 'max':
-                outputs, _ = torch.max(outputs, dim=1)
+                outputs, _ = torch.max(outputs * inputs["attention_mask"][:, :, None], dim=1)
             else:
                 raise NotImplementedError('please specify pooling_strategy from [`cls`, `last`, `avg`, `max`, `last_avg`]')
         return outputs
