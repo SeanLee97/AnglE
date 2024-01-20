@@ -544,15 +544,9 @@ class AngleDataCollator:
         del features
 
         if end_with_eos:
-            features = self.tokenizer.pad(
-                {'input_ids': [feature['input_ids'] for feature in new_features]},
-                padding=False,
-                max_length=self.max_length - 1,
-                return_tensors=return_tensors,
-                truncation=True,
-            )
-            features['input_ids'] = [input_ids + [self.tokenizer.eos_token_id] for input_ids in features['input_ids']]
-            features = self.tokenizer.pad(features, padding=self.padding, return_tensors=return_tensors)
+            features = {}
+            features['input_ids'] = [feature['input_ids'] + [self.tokenizer.eos_token_id] for feature in new_features]
+            features = self.tokenizer.pad(features, padding=self.padding, return_attention_mask=True, return_tensors=return_tensors)
         else:
             features = self.tokenizer.pad(
                 {'input_ids': [feature['input_ids'] for feature in new_features]},
@@ -560,19 +554,19 @@ class AngleDataCollator:
                 max_length=self.max_length,
                 return_tensors=return_tensors,
             )
-        features['attention_mask'] = self.tokenizer.pad(
-            {'input_ids': [feature['attention_mask'] for feature in new_features]},
-            padding=self.padding,
-            max_length=self.max_length,
-            return_tensors=return_tensors,
-        )['input_ids']
-        if has_token_type_ids:
-            features['token_type_ids'] = self.tokenizer.pad(
-                {'input_ids': [feature['token_type_ids'] for feature in new_features]},
+            features['attention_mask'] = self.tokenizer.pad(
+                {'input_ids': [feature['attention_mask'] for feature in new_features]},
                 padding=self.padding,
                 max_length=self.max_length,
                 return_tensors=return_tensors,
             )['input_ids']
+            if has_token_type_ids:
+                features['token_type_ids'] = self.tokenizer.pad(
+                    {'input_ids': [feature['token_type_ids'] for feature in new_features]},
+                    padding=self.padding,
+                    max_length=self.max_length,
+                    return_tensors=return_tensors,
+                )['input_ids']
         features['labels'] = torch.Tensor([feature['labels'] for feature in new_features])
 
         return features
