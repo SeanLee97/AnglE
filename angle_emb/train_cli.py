@@ -77,7 +77,8 @@ parser.add_argument('--epochs', type=int, default=20, help='Specify epochs, defa
 parser.add_argument('--save_steps', type=int, default=100, help='Specify save_steps, default 1000')
 parser.add_argument('--batch_size', type=int, default=32, help='Specify batch size, default 32')
 parser.add_argument('--maxlen', type=int, default=512, help='Specify max length, default 512')
-parser.add_argument('--gradient_accumulation_steps', type=int, default=1, help='Specify gradient_accumulation_steps, default 1')
+parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
+                    help='Specify gradient_accumulation_steps, default 1')
 parser.add_argument('--torch_dtype', type=str, default=None, help='Specify torch_dtype, default 1')
 parser.add_argument('--fp16', type=bool, default=None, choices=[0, 1],
                     help='Specify fp16, choices [0, 1], default None')
@@ -138,12 +139,14 @@ def main():
     print(ds)
     logger.info('Processing train...')
     train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
-        AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template), num_proc=args.workers)
+        AngleDataTokenizer(model.tokenizer, model.max_length,
+                           prompt_template=args.prompt_template), num_proc=args.workers)
     valid_ds = None
     if args.valid_split_name is not None:
         logger.info('Validation detected, processing validation...')
         valid_ds = ds[args.valid_split_name].shuffle(args.dataset_seed).map(
-            AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template), num_proc=args.workers)
+            AngleDataTokenizer(model.tokenizer, model.max_length,
+                               prompt_template=args.prompt_template), num_proc=args.workers)
 
     argument_kwargs = {}
     if args.push_to_hub:

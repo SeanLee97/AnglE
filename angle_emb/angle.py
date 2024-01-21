@@ -97,7 +97,7 @@ def cosine_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 20.0) -
     :param tau: float, scale factor, default 20
 
     :return: torch.Tensor, loss value
-    """
+    """  # NOQA
     # modified from: https://github.com/bojone/CoSENT/blob/124c368efc8a4b179469be99cb6e62e1f2949d39/cosent.py#L79
     y_true = y_true[::2, 0]
     y_true = (y_true[:, None] < y_true[None, :]).float()
@@ -121,7 +121,7 @@ def angle_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 1.0):
     :param tau: float, scale factor, default 1.0
 
     :return: torch.Tensor, loss value
-    """
+    """  # NOQA
     y_true = y_true[::2, 0]
     y_true = (y_true[:, None] < y_true[None, :]).float()
 
@@ -168,7 +168,7 @@ def in_batch_negative_loss(y_true: torch.Tensor,
     :param negative_weights: float, negative weights, default 0.0
 
     :return: torch.Tensor, loss value
-    """
+    """  # NOQA
     device = y_true.device
 
     def make_target_matrix(y_true: torch.Tensor):
@@ -436,9 +436,10 @@ class AngleDataTokenizer:
             extra_length += 1
 
         if self.prompt_template_tok is not None:
+            max_length = self.max_length - len(self.prompt_template_tok['input_ids']) - extra_length
             for text_column in text_columns:
                 tok = self.tokenizer(data[text_column],
-                                     max_length=self.max_length - len(self.prompt_template_tok['input_ids']) - extra_length,
+                                     max_length=max_length,
                                      truncation=True,
                                      add_special_tokens=False)
                 data[text_column] = self.tokenizer.decode(tok['input_ids'])
@@ -451,15 +452,15 @@ class AngleDataTokenizer:
         if self.prompt_template_tok is not None:
             for tok in toks:
                 if tok['input_ids'][-1] != self.prompt_template_tok['input_ids'][-1]:
-                    print('bad data:', f"token ids: {tok['input_ids']}, prompt token ids: {self.prompt_template_tok['input_ids']}")
+                    logger.info(f"data data: token ids={tok['input_ids']}, prompt_token_ids={self.prompt_template_tok['input_ids']}")  # NOQA
                     tok['input_ids'] = self.fix_bad_data(tok['input_ids'], self.prompt_template_tok['input_ids'])
                     try:
                         assert len(tok['input_ids']) == len(tok['attention_mask'])
                         assert tok['input_ids'][-1] == self.prompt_template_tok['input_ids'][-1]
-                        print('fixed it ;)')
-                        print('new data:', f"token ids: {tok['input_ids']}, prompt token ids: {self.prompt_template_tok['input_ids']}")
+                        logger.info('fixed it ;)')
+                        logger.info(f"new data, token ids={tok['input_ids']}, prompt_token_ids={self.prompt_template_tok['input_ids']}")  # NOQA
                     except AssertionError:
-                        print('failed to fix it :()')
+                        logger.info('failed to fix it :( skip it...')
 
         combined_tok = {}
         seperate_ids = []
@@ -546,7 +547,11 @@ class AngleDataCollator:
         if end_with_eos:
             features = {}
             features['input_ids'] = [feature['input_ids'] + [self.tokenizer.eos_token_id] for feature in new_features]
-            features = self.tokenizer.pad(features, padding=self.padding, return_attention_mask=True, return_tensors=return_tensors)
+            features = self.tokenizer.pad(
+                features,
+                padding=self.padding,
+                return_attention_mask=True,
+                return_tensors=return_tensors)
         else:
             features = self.tokenizer.pad(
                 {'input_ids': [feature['input_ids'] for feature in new_features]},
@@ -611,12 +616,14 @@ class Pooler:
             elif self.pooling_strategy == 'last':
                 outputs = outputs[torch.arange(batch_size, device=outputs.device), sequence_lengths]
             elif self.pooling_strategy == 'avg':
-                outputs = torch.sum(outputs * inputs["attention_mask"][:, :, None], dim=1) / torch.sum(inputs["attention_mask"])
+                outputs = torch.sum(
+                    outputs * inputs["attention_mask"][:, :, None], dim=1) / torch.sum(inputs["attention_mask"])
                 # outputs = torch.mean(outputs, dim=1)
             elif self.pooling_strategy == 'max':
                 outputs, _ = torch.max(outputs * inputs["attention_mask"][:, :, None], dim=1)
             else:
-                raise NotImplementedError('please specify pooling_strategy from [`cls`, `last`, `avg`, `max`, `last_avg`]')
+                raise NotImplementedError(
+                    'please specify pooling_strategy from [`cls`, `last`, `avg`, `max`, `last_avg`]')
         return outputs
 
 
@@ -724,7 +731,11 @@ class EvaluateCallback(TrainerCallback):
     :param evaluate_fn: Callable. It will receive valid_ds as input like `evaluate_fn(valid_ds)`.
     :param save_dir: Optional[str]. specify dir to save model with best results.
     """
-    def __init__(self, model: PreTrainedModel, valid_ds: Dataset, evaluate_fn: Callable, save_dir: Optional[str] = None):
+    def __init__(self,
+                 model: PreTrainedModel,
+                 valid_ds: Dataset,
+                 evaluate_fn: Callable,
+                 save_dir: Optional[str] = None):
         super().__init__()
         self.model = model
         self.valid_ds = valid_ds
@@ -767,7 +778,7 @@ class AnglE:
     :param kbit_kwargs: Optional[Dict]. kwargs for kbit. Default None.
         details refer to: https://huggingface.co/docs/peft/package_reference/peft_model#peft.prepare_model_for_kbit_training
     :param **kwargs: Any.
-    """
+    """  # NOQA
     cfg_file_name = 'angle.config'
     llm_patterns = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*']
 
@@ -805,12 +816,14 @@ class AnglE:
         if is_llm is None:
             self.is_llm = self.check_llm(model_name_or_path) or self.is_bellm
             if self.is_llm:
-                logger.info('LLM detected, automatically set is_llm=True. If it is wrong, you can manually set `is_llm`.')
+                logger.info('LLM detected, automatically set is_llm=True.'
+                            'If it is wrong, you can manually set `is_llm`.')
         self.apply_lora = apply_lora
         if self.apply_lora is None:
             if self.is_llm or self.is_bellm:
                 self.apply_lora = True
-                logger.info('LLM detected, automatically set apply_lora=True. If it is wrong, you can manually set `apply_lora`.')
+                logger.info('LLM detected, automatically set apply_lora=True.'
+                            'If it is wrong, you can manually set `apply_lora`.')
         if self.device == 'cuda':
             self.gpu_count = torch.cuda.device_count()
         elif self.device == 'mps':
@@ -928,7 +941,8 @@ class AnglE:
                         if self.apply_bfloat16:
                             model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                                 output_hidden_states=True,
-                                                                trust_remote_code=True).bfloat16().to(torch.device(self.device))
+                                                                trust_remote_code=True).bfloat16().to(
+                                                                    torch.device(self.device))
                         else:
                             model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                                 device_map=device_map,
@@ -1134,7 +1148,7 @@ class AnglE:
             refer to: https://huggingface.co/docs/transformers/v4.37.0/en/main_classes/trainer#transformers.TrainingArguments
         :param trainer_kwargs: Optional[Dict]. kwargs for AngleTrainer.
         :param loss_kwargs: Optional[Dict]. kwargs for AngleLoss.
-        """
+        """  # NOQA
         if output_dir is not None:
             os.makedirs(output_dir, exist_ok=True)
         # save config
