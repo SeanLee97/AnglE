@@ -941,8 +941,7 @@ class AnglE:
                         if self.apply_bfloat16:
                             model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                                 output_hidden_states=True,
-                                                                trust_remote_code=True).bfloat16().to(
-                                                                    torch.device(self.device))
+                                                                trust_remote_code=True).bfloat16()
                         else:
                             model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                                 device_map=device_map,
@@ -964,7 +963,7 @@ class AnglE:
                 if self.apply_bfloat16:
                     model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                         output_hidden_states=True,
-                                                        trust_remote_code=True).bfloat16().to(torch.device(self.device))
+                                                        trust_remote_code=True).bfloat16()
                 else:
                     model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                         device_map=device_map,
