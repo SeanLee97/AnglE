@@ -588,7 +588,7 @@ class Pooler:
     """
     def __init__(self,
                  model: PreTrainedModel,
-                 pooling_strategy: Optional[str] = None,
+                 pooling_strategy: Optional[Union[int, str]] = None,
                  padding_strategy: Optional[str] = None,
                  is_llm: bool = False):
         self.model = model
@@ -621,9 +621,13 @@ class Pooler:
                 # outputs = torch.mean(outputs, dim=1)
             elif self.pooling_strategy == 'max':
                 outputs, _ = torch.max(outputs * inputs["attention_mask"][:, :, None], dim=1)
+            elif self.pooling_strategy == 'all':
+                return outputs
+            elif isinstance(self.pooling_strategy, int) or self.pooling_strategy.isnumeric():
+                return outputs[:, int(self.pooling_strategy)]
             else:
                 raise NotImplementedError(
-                    'please specify pooling_strategy from [`cls`, `last`, `avg`, `max`, `last_avg`]')
+                    'please specify pooling_strategy from [`cls`, `last`, `avg`, `max`, `last_avg`, `all`, int]')
         return outputs
 
 
