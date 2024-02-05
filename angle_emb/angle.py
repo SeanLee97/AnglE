@@ -36,7 +36,12 @@ from . import bellm
 from .utils import logger
 
 
-def set_device():
+def set_device() -> str:
+    """
+    Set device automatically
+
+    :return: str, device name
+    """
     if torch.cuda.is_available():
         return 'cuda'
     elif torch.backends.mps.is_available():
@@ -45,6 +50,14 @@ def set_device():
 
 
 def find_all_linear_names(model: PreTrainedModel, linear_type: Optional[object] = None) -> List[str]:
+    """
+    Find all linear layer names
+
+    :param model: PreTrainedModel
+    :param linear_type: Optional[object] = None, linear type, such as nn.Linear and bnb.nn.Linear4bit.
+
+    :return: List[str], linear layer names
+    """
     if linear_type is None:
         linear_type = nn.Linear
     lora_module_names = set()
@@ -58,13 +71,33 @@ def find_all_linear_names(model: PreTrainedModel, linear_type: Optional[object] 
     return list(lora_module_names)
 
 
-def categorical_crossentropy(y_true: torch.Tensor, y_pred: torch.Tensor, from_logits: bool = True):
+def categorical_crossentropy(y_true: torch.Tensor, y_pred: torch.Tensor, from_logits: bool = True) -> torch.Tensor:
+    """
+    Compute categorical crossentropy
+
+    :param y_true: torch.Tensor, ground truth
+    :param y_pred: torch.Tensor, model output
+    :param from_logits: bool, `True` means y_pred has not transformed by softmax, default True
+
+    :return: torch.Tensor, loss value
+    """
     if from_logits:
         return -(F.log_softmax(y_pred, dim=1) * y_true).sum(dim=1)
     return -(torch.log(y_pred, dim=1) * y_true).sum(dim=1)
 
 
-def cosine_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 20.0):
+def cosine_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 20.0) -> torch.Tensor:
+    """
+    Compute cosine loss
+
+    :param y_true: torch.Tensor, ground truth.
+        The y_true must be zigzag style, such as [x[0][0], x[0][1], x[1][0], x[1][1], ...], where (x[0][0], x[0][1]) stands for a pair.
+    :param y_pred: torch.Tensor, model output.
+        The y_pred must be zigzag style, such as [o[0][0], o[0][1], o[1][0], o[1][1], ...], where (o[0][0], o[0][1]) stands for a pair.
+    :param tau: float, scale factor, default 20
+
+    :return: torch.Tensor, loss value
+    """  # NOQA
     # modified from: https://github.com/bojone/CoSENT/blob/124c368efc8a4b179469be99cb6e62e1f2949d39/cosent.py#L79
     y_true = y_true[::2, 0]
     y_true = (y_true[:, None] < y_true[None, :]).float()
@@ -78,6 +111,17 @@ def cosine_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 20.0):
 
 
 def angle_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 1.0):
+    """
+    Compute angle loss
+
+    :param y_true: torch.Tensor, ground truth.
+        The y_true must be zigzag style, such as [x[0][0], x[0][1], x[1][0], x[1][1], ...], where (x[0][0], x[0][1]) stands for a pair.
+    :param y_pred: torch.Tensor, model output.
+        The y_pred must be zigzag style, such as [o[0][0], o[0][1], o[1][0], o[1][1], ...], where (o[0][0], o[0][1]) stands for a pair.
+    :param tau: float, scale factor, default 1.0
+
+    :return: torch.Tensor, loss value
+    """  # NOQA
     y_true = y_true[::2, 0]
     y_true = (y_true[:, None] < y_true[None, :]).float()
 
@@ -112,9 +156,19 @@ def angle_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 1.0):
 def in_batch_negative_loss(y_true: torch.Tensor,
                            y_pred: torch.Tensor,
                            tau: float = 20.0,
-                           negative_weights: float = 0.0):
-    """in-batch negative loss
+                           negative_weights: float = 0.0) -> torch.Tensor:
     """
+    Compute in-batch negative loss, i.e., contrastive loss
+
+    :param y_true: torch.Tensor, ground truth.
+        The y_true must be zigzag style, such as [x[0][0], x[0][1], x[1][0], x[1][1], ...], where (x[0][0], x[0][1]) stands for a pair.
+    :param y_pred: torch.Tensor, model output.
+        The y_pred must be zigzag style, such as [o[0][0], o[0][1], o[1][0], o[1][1], ...], where (o[0][0], o[0][1]) stands for a pair.
+    :param tau: float, scale factor, default 20.0
+    :param negative_weights: float, negative weights, default 0.0
+
+    :return: torch.Tensor, loss value
+    """  # NOQA
     device = y_true.device
 
     def make_target_matrix(y_true: torch.Tensor):
@@ -148,7 +202,21 @@ def in_batch_negative_loss(y_true: torch.Tensor,
     return categorical_crossentropy(y_true, similarities, from_logits=True).mean()
 
 
-def contrastive_with_negative_loss(text: torch.Tensor, pos: torch.Tensor, neg: Optional[torch.Tensor] = None, tau: float = 20.0):
+def contrastive_with_negative_loss(
+        text: torch.Tensor,
+        pos: torch.Tensor,
+        neg: Optional[torch.Tensor] = None,
+        tau: float = 20.0) -> torch.Tensor:
+    """
+    Compute contrastive with negative loss
+
+    :param text: torch.Tensor, text.
+    :param pos: torch.Tensor, positive samples of text.
+    :param neg: torch.Tensor, negative samples of text.
+    :param tau: float, scale factor, default 20.0
+
+    :return: torch.Tensor, loss value
+    """
     target = torch.cat((pos, neg), dim=0) if neg is not None else pos  # (2B, D)
     q_norm = torch.nn.functional.normalize(text, p=2, dim=1)  # (B, D)
     t_norm = torch.nn.functional.normalize(target, p=2, dim=1)  # (2B, D)
@@ -159,22 +227,58 @@ def contrastive_with_negative_loss(text: torch.Tensor, pos: torch.Tensor, neg: O
     return nn.CrossEntropyLoss()(scores, labels)
 
 
-def compute_corrcoef(x, y):
+def compute_corrcoef(x: np.ndarray, y: np.ndarray) -> float:
+    """
+    Compute correlation coefficients
+
+    :param x: np.ndarry, x array
+    :param y: np.ndarry, y array
+
+    :return: float
+    """
     return scipy.stats.spearmanr(x, y).correlation
 
 
-def l2_normalize(vecs):
-    norms = (vecs**2).sum(axis=1, keepdims=True)**0.5
-    return vecs / np.clip(norms, 1e-8, np.inf)
+def l2_normalize(arr: np.ndarray) -> np.ndarray:
+    """
+    Normalize array using L2
+
+    :param arr: np.ndarray, input array
+    :return: np.ndarray
+    """
+    norms = (arr**2).sum(axis=1, keepdims=True)**0.5
+    return arr / np.clip(norms, 1e-8, np.inf)
 
 
-def optimal_threshold(y_true, y_pred):
-    loss = lambda t: -np.mean((y_true > 0.5) == (y_pred > np.tanh(t)))
+def optimal_threshold(y_true: np.ndarray, y_pred: np.ndarray) -> Tuple[float, float]:
+    """
+    Compute optimal threshold
+
+    :param y_true: np.ndarray, y_true
+    :param y_pred: np.ndarray, y_true
+
+    :return: Tuple[float, float]
+    """
+    loss = lambda t: -np.mean((y_true > 0.5) == (y_pred > np.tanh(t)))  # NOQA
     result = scipy.optimize.minimize(loss, 1, method='Powell')
     return np.tanh(result.x), -result.fun
 
 
 class Prompts:
+    """
+    Predefined prompts. Follow the model usage to choose the corresponding prompt.
+
+    Example::
+
+            from angle_emb import Prompts
+
+            # list all pre-defined prompts
+            print(Prompts.list_prompts())
+            # set prompt
+            angle.set_prompt(prompt=Prompts.A)
+
+    """
+
     A = 'Summarize sentence "{text}" in one word:"'
     B = 'You can only output one word. Summarize "{text}":"'
     C = 'Represent this sentence for searching relevant passages: {text}'
@@ -188,7 +292,18 @@ class Prompts:
 
 
 class DatasetFormats:
-    '''
+    """
+    Predefined Data Formats.
+
+    Check all available formats:
+
+            from angle_emb import DatasetFormats
+
+            print(DatasetFormats.list_formats())
+
+    """
+
+    """
     format A: text1,text2,label
     input format: [
         text1[0],
@@ -204,10 +319,10 @@ class DatasetFormats:
         label[1],
         ...
     ]
-    '''
+    """
     A = 'text1,text2,label'
 
-    '''
+    """
     format B: text,positive,negative
     input format: [
         text[0],
@@ -218,7 +333,7 @@ class DatasetFormats:
         negative[1],
         ...
     ]
-    '''
+    """
     B = 'text,positive,negative'
 
     @classmethod
@@ -230,6 +345,32 @@ class DatasetFormats:
 
 
 class AngleDataTokenizer:
+    """
+    Tokenize data using AngleDataTokenizer.
+
+    :param tokenizer: PreTrainedTokenizerBase. Tokenizer
+    :param max_length: Optional[int]. Specify max length
+    :param prompt_template: Optional[str], set prompt template, it will be applied to all input texts. Default None
+    :param extra_columns: Optional[List[str]].
+        If providing multiple placeholders in prompt_template, specify their name via extra_columns. Default None
+    :param dataset_format: Optional[str]. Specify dataset_format from DatasetFormats. Default None.
+        It will automatically detect the dataset format.
+    :param end_with_eos: bool. Specify whether ends with the eos token. Default False.
+
+    Example::
+
+            from datasets import load_dataset
+            from angle_emb import AnglE, AngleDataTokenizer
+
+            # define dataset
+            ds = load_dataset('your_dataset')
+            # define angle
+            angle = AnglE(*args, **kwargs)
+            # tokenize data
+            train_ds = ds['train'].shuffle().map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
+            valid_ds = ds['validation'].map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
+
+    """
     def __init__(self,
                  tokenizer: PreTrainedTokenizerBase,
                  max_length: Optional[int] = None,
@@ -295,9 +436,10 @@ class AngleDataTokenizer:
             extra_length += 1
 
         if self.prompt_template_tok is not None:
+            max_length = self.max_length - len(self.prompt_template_tok['input_ids']) - extra_length
             for text_column in text_columns:
                 tok = self.tokenizer(data[text_column],
-                                     max_length=self.max_length - len(self.prompt_template_tok['input_ids']) - extra_length,
+                                     max_length=max_length,
                                      truncation=True,
                                      add_special_tokens=False)
                 data[text_column] = self.tokenizer.decode(tok['input_ids'])
@@ -310,15 +452,15 @@ class AngleDataTokenizer:
         if self.prompt_template_tok is not None:
             for tok in toks:
                 if tok['input_ids'][-1] != self.prompt_template_tok['input_ids'][-1]:
-                    print('bad data:', f"token ids: {tok['input_ids']}, prompt token ids: {self.prompt_template_tok['input_ids']}")
+                    logger.info(f"data data: token ids={tok['input_ids']}, prompt_token_ids={self.prompt_template_tok['input_ids']}")  # NOQA
                     tok['input_ids'] = self.fix_bad_data(tok['input_ids'], self.prompt_template_tok['input_ids'])
                     try:
                         assert len(tok['input_ids']) == len(tok['attention_mask'])
                         assert tok['input_ids'][-1] == self.prompt_template_tok['input_ids'][-1]
-                        print('fixed it ;)')
-                        print('new data:', f"token ids: {tok['input_ids']}, prompt token ids: {self.prompt_template_tok['input_ids']}")
+                        logger.info('fixed it ;)')
+                        logger.info(f"new data, token ids={tok['input_ids']}, prompt_token_ids={self.prompt_template_tok['input_ids']}")  # NOQA
                     except AssertionError:
-                        print('failed to fix it :()')
+                        logger.info('failed to fix it :( skip it...')
 
         combined_tok = {}
         seperate_ids = []
@@ -342,6 +484,16 @@ class AngleDataTokenizer:
 
 @dataclass
 class AngleDataCollator:
+    """
+    AngleDataCollator. It will be implicitly used in AnglE.fit().
+    It can only handle the tokenized data using AngleDataTokenizer.
+
+    :param tokenizer:  PreTrainedTokenizerBase
+    :param padding:   Union[bool, str, PaddingStrategy], padding strategy
+    :param max_length:  Optional[int], max length
+    :param return_tensors:  str
+
+    """
     tokenizer: PreTrainedTokenizerBase
     padding: Union[bool, str, PaddingStrategy] = 'longest'
     max_length: Optional[int] = None
@@ -393,15 +545,13 @@ class AngleDataCollator:
         del features
 
         if end_with_eos:
+            features = {}
+            features['input_ids'] = [feature['input_ids'] + [self.tokenizer.eos_token_id] for feature in new_features]
             features = self.tokenizer.pad(
-                {'input_ids': [feature['input_ids'] for feature in new_features]},
-                padding=False,
-                max_length=self.max_length - 1,
-                return_tensors=return_tensors,
-                truncation=True,
-            )
-            features['input_ids'] = [input_ids + [self.tokenizer.eos_token_id] for input_ids in features['input_ids']]
-            features = self.tokenizer.pad(features, padding=self.padding, return_tensors=return_tensors)
+                features,
+                padding=self.padding,
+                return_attention_mask=True,
+                return_tensors=return_tensors)
         else:
             features = self.tokenizer.pad(
                 {'input_ids': [feature['input_ids'] for feature in new_features]},
@@ -409,28 +559,36 @@ class AngleDataCollator:
                 max_length=self.max_length,
                 return_tensors=return_tensors,
             )
-        features['attention_mask'] = self.tokenizer.pad(
-            {'input_ids': [feature['attention_mask'] for feature in new_features]},
-            padding=self.padding,
-            max_length=self.max_length,
-            return_tensors=return_tensors,
-        )['input_ids']
-        if has_token_type_ids:
-            features['token_type_ids'] = self.tokenizer.pad(
-                {'input_ids': [feature['token_type_ids'] for feature in new_features]},
+            features['attention_mask'] = self.tokenizer.pad(
+                {'input_ids': [feature['attention_mask'] for feature in new_features]},
                 padding=self.padding,
                 max_length=self.max_length,
                 return_tensors=return_tensors,
             )['input_ids']
+            if has_token_type_ids:
+                features['token_type_ids'] = self.tokenizer.pad(
+                    {'input_ids': [feature['token_type_ids'] for feature in new_features]},
+                    padding=self.padding,
+                    max_length=self.max_length,
+                    return_tensors=return_tensors,
+                )['input_ids']
         features['labels'] = torch.Tensor([feature['labels'] for feature in new_features])
 
         return features
 
 
 class Pooler:
+    """
+    Using Pooler to obtain sentence embeddings.
+
+    :param model: PreTrainedModel
+    :param pooling_strategy: Optional[str]. Currently support [`cls`, `last`, `avg`, `cls_avg`, `max`]. Default None.
+    :param padding_strategy: Optional[str]. `left` or `right`. Default None.
+    :param is_llm: bool. Default False
+    """
     def __init__(self,
                  model: PreTrainedModel,
-                 pooling_strategy: Optional[str] = None,
+                 pooling_strategy: Optional[Union[int, str]] = None,
                  padding_strategy: Optional[str] = None,
                  is_llm: bool = False):
         self.model = model
@@ -458,16 +616,30 @@ class Pooler:
             elif self.pooling_strategy == 'last':
                 outputs = outputs[torch.arange(batch_size, device=outputs.device), sequence_lengths]
             elif self.pooling_strategy == 'avg':
-                outputs = torch.sum(outputs * inputs["attention_mask"][:, :, None], dim=1) / torch.sum(inputs["attention_mask"])
+                outputs = torch.sum(
+                    outputs * inputs["attention_mask"][:, :, None], dim=1) / torch.sum(inputs["attention_mask"])
                 # outputs = torch.mean(outputs, dim=1)
             elif self.pooling_strategy == 'max':
                 outputs, _ = torch.max(outputs * inputs["attention_mask"][:, :, None], dim=1)
+            elif self.pooling_strategy == 'all':
+                return outputs
+            elif isinstance(self.pooling_strategy, int) or self.pooling_strategy.isnumeric():
+                return outputs[:, int(self.pooling_strategy)]
             else:
-                raise NotImplementedError('please specify pooling_strategy from [`cls`, `last`, `avg`, `max`, `last_avg`]')
+                raise NotImplementedError(
+                    'please specify pooling_strategy from [`cls`, `last`, `avg`, `max`, `last_avg`, `all`, int]')
         return outputs
 
 
 class AngleTrainer(Trainer):
+    """
+    Custom Huggingface Trainer for Angle.
+
+    :param pooler: Pooler. Required
+    :param loss_kwargs: Optional[Dict]. Default None.
+    :param dataset_format: str. Default DatasetFormats.A
+    :param **kwargs: other parameters of Trainer.
+    """
     def __init__(self,
                  pooler: Pooler,
                  loss_kwargs: Optional[Dict] = None,
@@ -487,6 +659,17 @@ class AngleTrainer(Trainer):
 
 
 class AngleLoss:
+    """
+    Configure AngleLoss.
+
+    :param w1: float. weight for cosine_loss. Default 1.0
+    :param w2: float. weight for contrastive loss. Default 1.0
+    :param w3: float. weight for angle loss. Default 1.0
+    :param cosine_tau: float. tau for cosine loss. Default 20.0
+    :param ibn_tau: float. tau for contrastive loss. Default 20.0
+    :param angle_tau: float. tau for angle loss. Default 1.0
+    :param dataset_format: Optional[str]. Default None.
+    """
     def __init__(self,
                  w1: float = 1.0,
                  w2: float = 1.0,
@@ -543,7 +726,20 @@ class AngleLoss:
 
 
 class EvaluateCallback(TrainerCallback):
-    def __init__(self, model: PreTrainedModel, valid_ds: Dataset, evaluate_fn: Callable, save_dir: Optional[str] = None):
+    """
+    Custom TrainerCallback for Angle.
+    This callback will compute corrcoef for each epoch.
+
+    :param model: PreTrainedModel.
+    :param valid_ds: Dataset.
+    :param evaluate_fn: Callable. It will receive valid_ds as input like `evaluate_fn(valid_ds)`.
+    :param save_dir: Optional[str]. specify dir to save model with best results.
+    """
+    def __init__(self,
+                 model: PreTrainedModel,
+                 valid_ds: Dataset,
+                 evaluate_fn: Callable,
+                 save_dir: Optional[str] = None):
         super().__init__()
         self.model = model
         self.valid_ds = valid_ds
@@ -563,6 +759,30 @@ class EvaluateCallback(TrainerCallback):
 
 
 class AnglE:
+    """
+    AnglE. Everything is here👋
+
+    :param model_name_or_path: str, model name or path.
+    :param max_length: int. Default 512
+    :param model_kwargs: Optional[Dict]. kwargs for model.
+    :param lora_config_kwargs: Optional[Dict]. kwargs for peft lora_config.
+        details refer to: https://huggingface.co/docs/peft/tutorial/peft_model_config
+    :param pooling_strategy: Optional[str]. Pooling strategy.
+        Currently support [`cls`, `last`, `avg`, `cls_avg`, `max`]
+    :param apply_lora: Optional[bool]. Whether apply lora. Default None.
+    :param train_mode: bool. Whether load for training. Default True.
+    :param load_kbit: Optional[int]. Specify kbit training from [4, 8, 16]. Default None.
+    :param is_llm: Optional[bool]. Whether the model is llm. Default None.
+    :param pretrained_model_path: Optional[str]. Default None.
+    :param pretrained_lora_path: Optional[str]. Default None.
+    :param apply_bfloat16: Optional[bool]. Whether load using torch.bfloat16. Default None.
+    :param torch_dtype: Optional[torch.dtype]. Specify torch_dtype. Default None.
+    :param device: Optional[str]. Specify device. Default None.
+    :param bellm_class_name: Optional[str]. Specify bellm class name. Default None.
+    :param kbit_kwargs: Optional[Dict]. kwargs for kbit. Default None.
+        details refer to: https://huggingface.co/docs/peft/package_reference/peft_model#peft.prepare_model_for_kbit_training
+    :param **kwargs: Any.
+    """  # NOQA
     cfg_file_name = 'angle.config'
     llm_patterns = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*']
 
@@ -600,12 +820,14 @@ class AnglE:
         if is_llm is None:
             self.is_llm = self.check_llm(model_name_or_path) or self.is_bellm
             if self.is_llm:
-                logger.info('LLM detected, automatically set is_llm=True. If it is wrong, you can manually set `is_llm`.')
+                logger.info('LLM detected, automatically set is_llm=True.'
+                            'If it is wrong, you can manually set `is_llm`.')
         self.apply_lora = apply_lora
         if self.apply_lora is None:
             if self.is_llm or self.is_bellm:
                 self.apply_lora = True
-                logger.info('LLM detected, automatically set apply_lora=True. If it is wrong, you can manually set `apply_lora`.')
+                logger.info('LLM detected, automatically set apply_lora=True.'
+                            'If it is wrong, you can manually set `apply_lora`.')
         if self.device == 'cuda':
             self.gpu_count = torch.cuda.device_count()
         elif self.device == 'mps':
@@ -723,7 +945,7 @@ class AnglE:
                         if self.apply_bfloat16:
                             model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                                 output_hidden_states=True,
-                                                                trust_remote_code=True).bfloat16().to(torch.device(self.device))
+                                                                trust_remote_code=True).bfloat16()
                         else:
                             model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                                 device_map=device_map,
@@ -745,7 +967,7 @@ class AnglE:
                 if self.apply_bfloat16:
                     model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                         output_hidden_states=True,
-                                                        trust_remote_code=True).bfloat16().to(torch.device(self.device))
+                                                        trust_remote_code=True).bfloat16()
                 else:
                     model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                         device_map=device_map,
@@ -845,6 +1067,29 @@ class AnglE:
                         pooling_strategy: str = 'cls',
                         train_mode: bool = False,
                         **kwargs):
+        """
+        Load AnglE from pretrained model.
+
+        :param model_name_or_path: str, model name or path. Required.
+        :param pretrained_model_path: Optional[str].
+        :param pretrained_lora_path: Optional[str].
+        :param is_llm: Optional[bool].
+        :param pooling_strategy: str. Pooling Strategy. Default `cls`.
+        :param train_mode: bool. Default False.
+        :param kwargs: Other kwargs for AnglE.
+
+        :return: AnglE object.
+
+        Example::
+
+                from angle_emb import AnglE
+
+                angle = AnglE.from_pretrained(model_name_or_path)
+                # fit
+                angle.fit(*args, **kwargs)
+                # inference
+                angle.encode(*args, **kwargs)
+        """
         angle = AnglE(model_name_or_path,
                       is_llm=is_llm,
                       pretrained_model_path=pretrained_model_path,
@@ -885,6 +1130,28 @@ class AnglE:
             argument_kwargs: Optional[Dict] = None,
             trainer_kwargs: Optional[Dict] = None,
             loss_kwargs: Optional[Dict] = None):
+        """
+        Fit using AnglE.
+
+        :param train_ds: Dataset. tokenized train dataset. Required.
+        :param valid_ds: Optional[Dataset]. tokenized valid dataset. Default None.
+        :param batch_size: int. Default 32.
+        :param output_dir: Optional[str]. save dir. Default None.
+        :param epochs: int. Default 1.
+        :param learning_rate: float. Default 1e-5.
+        :param warmup_steps: int. Default 1000.
+        :param logging_steps: int. Default 10.
+        :param eval_steps: Optional[int]. Default None.
+        :param save_steps: int. Default 100.
+        :param save_strategy: str. Default steps.
+        :param save_total_limit: int. Default 10.
+        :param gradient_accumulation_steps: int. Default 1.
+        :param fp16: Optional[bool]. Default None.
+        :param argument_kwargs: Optional[Dict]. kwargs for TrainingArguments.
+            refer to: https://huggingface.co/docs/transformers/v4.37.0/en/main_classes/trainer#transformers.TrainingArguments
+        :param trainer_kwargs: Optional[Dict]. kwargs for AngleTrainer.
+        :param loss_kwargs: Optional[Dict]. kwargs for AngleLoss.
+        """  # NOQA
         if output_dir is not None:
             os.makedirs(output_dir, exist_ok=True)
         # save config
@@ -986,7 +1253,15 @@ class AnglE:
                max_length: Optional[int] = None,
                end_with_eos: bool = False,
                to_numpy: bool = True,
-               device: Any = None):
+               device: Optional[Any] = None):
+        """
+        encode texts.
+
+        :param inputs: Union[List[str], Tuple[str], List[Dict], str]. Input texts. Required.
+        :param max_length: Optional[int]. Default None.
+        :param to_numpy: bool. Default True.
+        :param device: Optional[Any]. Default None.
+        """
         if device is None:
             device = self.device
         self.backbone.eval()
