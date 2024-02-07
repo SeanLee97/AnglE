@@ -229,6 +229,8 @@ We support two dataset formats:
 
 2) `DatasetFormats.B`: it is a triple format with three columns: `text`, `positive`, and `negative`. `positive` and `negative` store the positive and negative samples of `text`.
 
+3) `DatasetFormats.C`: it is a pair format with two columns: `text`, `positive`. `positive` store the positive sample of `text`.
+
 You need to prepare your data into huggingface `datasets.Dataset` in one of the formats in terms of your supervised data.
 
 ### 2. Train
