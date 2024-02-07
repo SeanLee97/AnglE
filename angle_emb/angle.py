@@ -741,7 +741,7 @@ class AngleLoss:
         elif self.dataset_format == DatasetFormats.C:
             text = outputs[::2]
             positive = outputs[1::2]
-            loss = contrastive_with_negative_loss(text, positive, negative=None, tau=self.ibn_tau)
+            loss = contrastive_with_negative_loss(text, positive, neg=None, tau=self.ibn_tau)
         else:
             raise NotImplementedError
         return loss
