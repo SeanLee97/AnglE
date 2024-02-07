@@ -308,6 +308,7 @@ You are welcome to use our code and pre-trained models. If you use our code and 
 
 | 📅 | Description |
 |----|------|
+| 2024 Feb 7 |  support training with only positive pairs (`DatasetFormats.C`)  |
 | 2024 Jan 11 |  refactor to support `angle-trainer` and BeLLM  |
 | 2023 Dec 4 |  Release a universal English sentence embedding model: [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1)  |
 | 2023 Nov 2 |  Release an English pretrained model: `SeanLee97/angle-llama-13b-nli` |
