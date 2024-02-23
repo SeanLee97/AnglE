@@ -19,8 +19,6 @@ parser.add_argument('--pretrained_model_path', type=str, default=None,
                     help='Specify pretrained model path to load pretrained model, default None')
 parser.add_argument('--pretrained_lora_path', type=str, default=None,
                     help='Specify pretrained lora path to load lora, default None')
-parser.add_argument('--bellm_class_name', type=str, default=None,
-                    help='Specify bellm class name, default None')
 parser.add_argument('--train_name_or_path', type=str, required=True,
                     help='Specify huggingface datasets name or local file path for train set, required')
 parser.add_argument('--train_subset_name', type=str, default=None,
@@ -85,6 +83,20 @@ parser.add_argument('--fp16', type=bool, default=None, choices=[0, 1],
 parser.add_argument('--push_to_hub', type=int, default=0, choices=[0, 1], help='Specify push_to_hub, default 0')
 parser.add_argument('--hub_model_id', type=str, default=None,
                     help='Specify push_to_hub_model_id, default None, format like organization/model_id')
+# configure TDMSE
+parser.add_argument('--apply_tdmse', type=int, default=0, choices=[0, 1],
+                    help='Specify apply_tdmse to support 2DMSE training, default 0')
+parser.add_argument('--apply_tdmse_kl', type=int, default=1, choices=[0, 1],
+                    help='Specify apply_tdmse_kl to support 2DMSE training with KL Divergence, default 1')
+parser.add_argument('--tdmse_kl_temperature', type=float, default=1.0,
+                    help='Specify KL temperature for tdmse, default 1.0')
+parser.add_argument('--tdmse_teacher_lambda', type=float, default=1.0,
+                    help='Specify teacher lambda for tdmse, default 1.0')
+parser.add_argument('--tdmse_student_lambda', type=float, default=1.0,
+                    help='Specify student lambda for tdmse, default 1.0')
+# configure teacher alignment
+parser.add_argument('--fixed_teacher_name_or_path', type=str, default=None,
+                    help='Specify model_name_or_path for teacher alignment, default None')
 # configure wandb
 parser.add_argument('--wandb_project', type=str, default=None, help='Specify WANDB_PROJECT, default None')
 parser.add_argument('--wandb_log_model', type=str, default=None, help='Specify WANDB_LOG_MODEL, default None')
@@ -120,11 +132,8 @@ def main():
                       'r': args.lora_r,
                       'lora_alpha': args.lora_alpha,
                       'lora_dropout': args.lora_dropout,
-                      'target_modules': ['fc2', 'Wqkv', 'fc1'] if 'BePhi2Model' == args.bellm_class_name else None,
                   },
                   load_kbit=args.load_kbit,
-                  bellm_class_name=args.bellm_class_name,
-                  kbit_kwargs={'use_gradient_checkpointing': False} if 'BePhi2Model' == args.bellm_class_name else None,
                   torch_dtype=args.torch_dtype)
 
     if args.start_bilayer_index is not None:
@@ -156,6 +165,16 @@ def main():
     if args.wandb_project is not None:
         argument_kwargs['report_to'] = 'wandb'
 
+    trainer_kwargs = None
+    if args.apply_tdmse:
+        trainer_kwargs = {
+            'apply_tdmse_kl': args.apply_tdmse_kl,
+            'tdmse_kl_temperature': args.tdmse_kl_temperature,
+            'tdmse_teacher_lambda': args.tdmse_teacher_lambda,
+            'tdmse_student_lambda': args.tdmse_student_lambda,
+            'fixed_teacher_name_or_path': args.fixed_teacher_name_or_path,
+        }
+
     model.fit(
         train_ds=train_ds,
         valid_ds=valid_ds,
@@ -176,7 +195,9 @@ def main():
             'angle_tau': args.angle_tau,
         },
         fp16=args.fp16,
-        argument_kwargs=argument_kwargs
+        argument_kwargs=argument_kwargs,
+        apply_tdmse=args.apply_tdmse,
+        trainer_kwargs=trainer_kwargs,
     )
 
 

@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import json
+import random
 from functools import partial
 from typing import Any, Dict, Optional, List, Union, Tuple, Callable
 from dataclasses import dataclass
@@ -32,8 +33,10 @@ from peft import (
 )
 from peft.tuners.lora import LoraLayer
 
-from . import bellm
 from .utils import logger
+
+
+DEFAULT_LLM_PATTERNS = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*', r'.*mistral.*']
 
 
 def set_device() -> str:
@@ -262,6 +265,74 @@ def optimal_threshold(y_true: np.ndarray, y_pred: np.ndarray) -> Tuple[float, fl
     loss = lambda t: -np.mean((y_true > 0.5) == (y_pred > np.tanh(t)))  # NOQA
     result = scipy.optimize.minimize(loss, 1, method='Powell')
     return np.tanh(result.x), -result.fun
+
+
+def check_llm(model_name_or_path: str, llm_regex_patterns: List[str] = None) -> bool:
+    if llm_regex_patterns is not None:
+        llm_regex_patterns += DEFAULT_LLM_PATTERNS
+    else:
+        llm_regex_patterns = DEFAULT_LLM_PATTERNS
+    model_name_or_path = model_name_or_path.lower()
+    for pattern in llm_regex_patterns:
+        if re.match(pattern, model_name_or_path):
+            return True
+    return False
+
+
+def get_pooling(outputs: torch.Tensor,
+                inputs: Dict,
+                pooling_strategy: str,
+                padding_strategy: str = 'right') -> torch.Tensor:
+    """
+    get pooling
+
+    :param outputs:  torch.Tensor. Model outputs (without pooling)
+    :param inputs:  Dict. Model inputs
+    :param pooling_strategy:  str. Pooling strategy ['cls', 'cls_avg', 'cls_max', 'last', 'avg', 'max', 'all', index]
+    :param padding_strategy:  str. Padding strategy of tokenizers (`left` or `right`).
+        It can be obtained by `tokenizer.padding_side`.
+    """
+    if pooling_strategy == 'cls':
+        outputs = outputs[:, 0]
+    elif pooling_strategy == 'cls_avg':
+        avg = torch.sum(
+            outputs * inputs["attention_mask"][:, :, None], dim=1) / torch.sum(inputs["attention_mask"])
+        outputs = (outputs[:, 0] + avg) / 2.0
+    elif pooling_strategy == 'cls_max':
+        maximum, _ = torch.max(outputs * inputs["attention_mask"][:, :, None], dim=1)
+        outputs = (outputs[:, 0] + maximum) / 2.0
+    elif pooling_strategy == 'last':
+        batch_size = inputs['input_ids'].shape[0]
+        sequence_lengths = -1 if padding_strategy == 'left' else inputs["attention_mask"].sum(dim=1) - 1
+        outputs = outputs[torch.arange(batch_size, device=outputs.device), sequence_lengths]
+    elif pooling_strategy == 'avg':
+        outputs = torch.sum(
+            outputs * inputs["attention_mask"][:, :, None], dim=1) / torch.sum(inputs["attention_mask"])
+    elif pooling_strategy == 'max':
+        outputs, _ = torch.max(outputs * inputs["attention_mask"][:, :, None], dim=1)
+    elif pooling_strategy == 'all':
+        # keep outputs
+        pass
+    elif isinstance(pooling_strategy, int) or pooling_strategy.isnumeric():
+        # index
+        outputs = outputs[:, int(pooling_strategy)]
+    else:
+        raise NotImplementedError(
+            'please specify pooling_strategy from [`cls`, `last`, `avg`, `max`, `last_avg`, `all`, int]')
+    return outputs
+
+
+def get_geometric_hidden_sizes(base: int = 8, max_hidden: int = 768) -> List[int]:
+    """
+    get geometric hidden size series list given a hidden size range
+
+    """
+    lst = []
+    s = base
+    while s < max_hidden:
+        lst.append(s)
+        s *= 2
+    return lst
 
 
 class Prompts:
@@ -614,66 +685,184 @@ class Pooler:
         self.padding_strategy = padding_strategy
         self.is_llm = is_llm
 
-    def __call__(self, inputs) -> Any:
-        if self.is_llm or self.pooling_strategy == 'last':
-            batch_size = inputs['input_ids'].shape[0]
-            if self.padding_strategy == 'left':
-                sequence_lengths = -1
-            else:
-                sequence_lengths = inputs["attention_mask"].sum(dim=1) - 1
-
+    def __call__(self, inputs: Dict, layer_index: int = -1, embedding_size: Optional[int] = None) -> torch.Tensor:
+        """
+        :param inputs: Dict. Model inputs.
+        :param layer_index: int. Get embeddings from specific layer.
+        :param embedding_size: int. Set embedding size for sentence embeddings for 2DMSE models.
+        """
+        outputs = self.model(output_hidden_states=True, return_dict=True, **inputs).hidden_states[layer_index]
         if self.is_llm:
-            hidden_states = self.model(output_hidden_states=True, return_dict=True, **inputs).hidden_states[-1]
-            outputs = hidden_states[torch.arange(batch_size, device=hidden_states.device), sequence_lengths]
+            batch_size = inputs['input_ids'].shape[0]
+            sequence_lengths = -1 if self.padding_strategy == 'left' else inputs["attention_mask"].sum(dim=1) - 1
+            outputs = outputs[torch.arange(batch_size, device=outputs.device), sequence_lengths]
         else:
-            outputs = self.model(**inputs).last_hidden_state
-            if self.pooling_strategy == 'cls':
-                outputs = outputs[:, 0]
-            elif self.pooling_strategy == 'cls_avg':
-                outputs = (outputs[:, 0] + torch.mean(outputs, dim=1)) / 2.0
-            elif self.pooling_strategy == 'last':
-                outputs = outputs[torch.arange(batch_size, device=outputs.device), sequence_lengths]
-            elif self.pooling_strategy == 'avg':
-                outputs = torch.sum(
-                    outputs * inputs["attention_mask"][:, :, None], dim=1) / torch.sum(inputs["attention_mask"])
-                # outputs = torch.mean(outputs, dim=1)
-            elif self.pooling_strategy == 'max':
-                outputs, _ = torch.max(outputs * inputs["attention_mask"][:, :, None], dim=1)
-            elif self.pooling_strategy == 'all':
-                return outputs
-            elif isinstance(self.pooling_strategy, int) or self.pooling_strategy.isnumeric():
-                return outputs[:, int(self.pooling_strategy)]
-            else:
-                raise NotImplementedError(
-                    'please specify pooling_strategy from [`cls`, `last`, `avg`, `max`, `last_avg`, `all`, int]')
+            outputs = get_pooling(outputs, inputs, self.pooling_strategy, padding_strategy=self.padding_strategy)
+        if embedding_size is not None:
+            # topk embedding size
+            return outputs[:, :embedding_size]
         return outputs
 
 
 class AngleTrainer(Trainer):
     """
-    Custom Huggingface Trainer for Angle.
+    Custom Huggingface Trainer for AnglE.
 
     :param pooler: Pooler. Required
     :param loss_kwargs: Optional[Dict]. Default None.
     :param dataset_format: str. Default DatasetFormats.A
+    :param fixed_teacher_name_or_path: Optional[str]. For distribution alignment.
     :param **kwargs: other parameters of Trainer.
     """
     def __init__(self,
                  pooler: Pooler,
                  loss_kwargs: Optional[Dict] = None,
                  dataset_format: str = DatasetFormats.A,
+                 fixed_teacher_name_or_path: Optional[str] = None,
+                 alignment_pooling_strategy: str = 'cls',
                  **kwargs):
         super().__init__(**kwargs)
         self.pooler = pooler
         if loss_kwargs is None:
             loss_kwargs = {}
         self.loss_fct = AngleLoss(dataset_format=dataset_format, **loss_kwargs)
+        self.fixed_teacher_name_or_path = fixed_teacher_name_or_path
+        self.alignment_pooling_strategy = alignment_pooling_strategy
+        if fixed_teacher_name_or_path is not None:
+            assert not check_llm(fixed_teacher_name_or_path), ('Currently not support LLMs alignment,'
+                                                               f' teacher={fixed_teacher_name_or_path}')
+            assert self.pooler.pooling_strategy == 'all', ('fixed_teacher_name_or_path detected!'
+                                                           ' please set --pooling_strategy all')
+            fixed_teacher_backbone = AutoModel.from_pretrained(
+                fixed_teacher_name_or_path,
+                trust_remote_code=True,
+                torch_dtype="auto")
+
+            fixed_teacher_backbone.config.use_cache = False
+            self.fixed_teacher_pooler = Pooler(
+                fixed_teacher_backbone,
+                pooling_strategy='all',
+                padding_strategy=self.pooler.padding_strategy,
+                is_llm=False)
+            logger.info(f'Train with alignment, teacher={fixed_teacher_name_or_path}')
 
     def compute_loss(self, model, inputs, return_outputs=False):
         labels = inputs.pop("labels", None)
-        outputs = self.pooler(inputs)
-        loss = self.loss_fct(labels, outputs)
+        if self.fixed_teacher_name_or_path is not None:
+            all_outputs = self.pooler(inputs)
+            outputs = get_pooling(all_outputs, inputs,
+                                  self.alignment_pooling_strategy,
+                                  self.pooler.padding_strategy)
+            loss = self.loss_fct(labels, outputs)
+            with torch.no_grad():
+                self.fixed_teacher_pooler.model = self.fixed_teacher_pooler.model.to(self.pooler.model.device)
+                all_fixed_outputs = self.fixed_teacher_pooler(inputs)
+
+            alignment_loss = self.kl_loss_fct(
+                F.log_softmax(all_outputs, dim=-1),
+                F.softmax(all_fixed_outputs, dim=-1)
+            )
+            loss += alignment_loss
+        else:
+            labels = inputs.pop("labels", None)
+            outputs = self.pooler(inputs)
+            loss = self.loss_fct(labels, outputs)
+
         return (loss, outputs) if return_outputs else loss
+
+
+class AngleTDMSETrainer(AngleTrainer):
+    """
+    Custom Huggingface Trainer for AnglE 2DMSE.
+
+    :param pooler: Pooler. Required
+    :param loss_kwargs: Optional[Dict]. Default None.
+    :param dataset_format: str. Default DatasetFormats.A
+    :param fixed_teacher_name_or_path: Optional[str]. For distribution alignment.
+
+    :param **kwargs: other parameters of Trainer.
+    """
+    def __init__(self,
+                 pooler: Pooler,
+                 loss_kwargs: Optional[Dict] = None,
+                 dataset_format: str = DatasetFormats.A,
+                 fixed_teacher_name_or_path: Optional[str] = None,
+                 tdmse_kl_temperature: float = 1.0,
+                 tdmse_teacher_lambda: float = 1.0,
+                 tdmse_student_lambda: float = 1.0,
+                 apply_tdmse_kl: bool = True,
+                 **kwargs):
+        super().__init__(pooler=pooler,
+                         loss_kwargs=loss_kwargs,
+                         dataset_format=dataset_format,
+                         fixed_teacher_name_or_path=fixed_teacher_name_or_path,
+                         **kwargs)
+        self.tdmse_kl_temperature = tdmse_kl_temperature
+        self.tdmse_teacher_lambda = tdmse_teacher_lambda
+        self.tdmse_student_lambda = tdmse_student_lambda
+        self.apply_tdmse_kl = apply_tdmse_kl
+        self.n_layers = self.pooler.model.config.num_hidden_layers
+        self.tdmse_hidden_sizes = get_geometric_hidden_sizes(base=8, max_hidden=self.pooler.model.config.hidden_size)
+        self.kl_loss_fct = nn.KLDivLoss(reduction='batchmean')
+        logger.info('Train 2DMSE!')
+
+    def compute_loss(self, model, inputs, return_outputs=False):
+        labels = inputs.pop("labels", None)
+        # layer
+        sample_layer = random.randint(1, self.n_layers - 1)
+        if self.fixed_teacher_name_or_path is not None:
+            all_teacher_outputs = self.pooler(inputs, layer_index=-1)
+            teacher_outputs = get_pooling(all_teacher_outputs, inputs,
+                                          self.alignment_pooling_strategy,
+                                          self.pooler.padding_strategy)
+            all_student_outputs = self.pooler(inputs, layer_index=sample_layer)
+            student_outputs = get_pooling(all_student_outputs, inputs,
+                                          self.alignment_pooling_strategy,
+                                          self.pooler.padding_strategy)
+        else:
+            teacher_outputs = self.pooler(inputs, layer_index=-1)
+            student_outputs = self.pooler(inputs, layer_index=sample_layer)
+
+        kl_outputs = teacher_outputs
+        if self.fixed_teacher_name_or_path is not None:
+            with torch.no_grad():
+                self.fixed_teacher_pooler.model = self.fixed_teacher_pooler.model.to(self.pooler.model.device)
+                all_fixed_outputs = self.fixed_teacher_pooler(inputs)
+                kl_outputs = get_pooling(all_fixed_outputs, inputs,
+                                         self.alignment_pooling_strategy,
+                                         self.pooler.padding_strategy)
+
+        teacher_loss = self.loss_fct(labels, teacher_outputs)
+        loss1 = self.tdmse_teacher_lambda * teacher_loss
+        if self.tdmse_student_lambda > 0:
+            student_loss = self.loss_fct(labels, student_outputs)
+            loss1 += self.tdmse_student_lambda * student_loss
+        if self.apply_tdmse_kl and self.tdmse_student_lambda > 0:
+            kl_loss = self.kl_loss_fct(
+                F.log_softmax(student_outputs[:, None, :] / self.tdmse_kl_temperature, dim=-1),
+                F.softmax(kl_outputs[:, None, :] / self.tdmse_kl_temperature, dim=-1)
+            ) * self.tdmse_kl_temperature**2
+            loss1 += kl_loss
+
+        # feature
+        hidden_size = random.choice(self.tdmse_hidden_sizes)
+        slimmed_teacher_outputs = teacher_outputs[:, :hidden_size]
+        slimmed_student_outputs = student_outputs[:, :hidden_size]
+
+        slimmed_teacher_loss = self.loss_fct(labels, slimmed_teacher_outputs)
+        loss2 = self.tdmse_teacher_lambda * slimmed_teacher_loss
+        if self.tdmse_student_lambda > 0:
+            slimmed_student_loss = self.loss_fct(labels, slimmed_student_outputs)
+            loss2 += self.tdmse_student_lambda * slimmed_student_loss
+        loss = loss1 + loss2
+
+        if self.fixed_teacher_name_or_path is not None:
+            alignment_loss = self.kl_loss_fct(
+                F.log_softmax(all_teacher_outputs, dim=-1),
+                F.softmax(all_fixed_outputs, dim=-1)
+            )
+            loss += alignment_loss
+        return (loss, teacher_outputs) if return_outputs else loss
 
 
 class AngleLoss:
@@ -800,13 +989,11 @@ class AnglE:
     :param apply_bfloat16: Optional[bool]. Whether load using torch.bfloat16. Default None.
     :param torch_dtype: Optional[torch.dtype]. Specify torch_dtype. Default None.
     :param device: Optional[str]. Specify device. Default None.
-    :param bellm_class_name: Optional[str]. Specify bellm class name. Default None.
     :param kbit_kwargs: Optional[Dict]. kwargs for kbit. Default None.
         details refer to: https://huggingface.co/docs/peft/package_reference/peft_model#peft.prepare_model_for_kbit_training
     :param **kwargs: Any.
     """  # NOQA
     cfg_file_name = 'angle.config'
-    llm_patterns = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*']
 
     def __init__(self,
                  model_name_or_path: str,
@@ -823,7 +1010,6 @@ class AnglE:
                  apply_bfloat16: Optional[bool] = None,
                  torch_dtype: Optional[torch.dtype] = None,
                  device: Optional[str] = None,
-                 bellm_class_name: Optional[str] = None,
                  kbit_kwargs: Optional[Dict] = None,
                  **kwargs: Any):
         super().__init__()
@@ -836,17 +1022,14 @@ class AnglE:
             self.device = device
         else:
             self.device = set_device()
-        self.is_bellm = bellm.check_bellm(bellm_class_name)
-        if self.is_bellm:
-            logger.info('BeLLM detected!')
         if is_llm is None:
-            self.is_llm = self.check_llm(model_name_or_path) or self.is_bellm
+            self.is_llm = check_llm(model_name_or_path)
             if self.is_llm:
                 logger.info('LLM detected, automatically set is_llm=True.'
                             'If it is wrong, you can manually set `is_llm`.')
         self.apply_lora = apply_lora
         if self.apply_lora is None:
-            if self.is_llm or self.is_bellm:
+            if self.is_llm:
                 self.apply_lora = True
                 logger.info('LLM detected, automatically set apply_lora=True.'
                             'If it is wrong, you can manually set `apply_lora`.')
@@ -858,8 +1041,7 @@ class AnglE:
             self.gpu_count = 0
 
         self.prompt = None
-        if self.is_llm and not self.is_bellm:
-            # do not set prompt for bellm
+        if self.is_llm:
             logger.info('LLM detected, automatically set prompt. '
                         'You can change this setting by manually configuring the `set_prompt()` function.')
             self.set_prompt()
@@ -891,13 +1073,13 @@ class AnglE:
         kbit_kwargs = kbit_kwargs if kbit_kwargs is not None else {}
         if self.is_llm:
             device_map = "auto"
-            MODEL_CLASS = getattr(bellm, bellm_class_name) if self.is_bellm else AutoModelForCausalLM
+            MODEL_CLASS = AutoModelForCausalLM
             if train_mode and self.gpu_count > 1:
                 device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
             # LLM
             if self.apply_lora:
                 lora_config['bias'] = "none"
-                lora_config['task_type'] = TaskType.FEATURE_EXTRACTION if self.is_bellm else TaskType.CAUSAL_LM
+                lora_config['task_type'] = TaskType.CAUSAL_LM
 
                 if load_kbit == 4:
                     model = MODEL_CLASS.from_pretrained(
@@ -1049,12 +1231,12 @@ class AnglE:
             self.backbone = self.backbone.to(torch.device(self.device))
         return self
 
-    def check_llm(self, model_name_or_path: str) -> bool:
-        model_name_or_path = model_name_or_path.lower()
-        for pattern in AnglE.llm_patterns:
-            if re.match(pattern, model_name_or_path):
-                return True
-        return False
+    def to(self, device: Any):
+        if isinstance(device, str):
+            device = torch.device(device)
+        self.backbone = self.backbone.to(device)
+        self.device = device
+        return self
 
     @staticmethod
     def kbit_post_handle(model: nn.Module) -> nn.Module:
@@ -1151,7 +1333,8 @@ class AnglE:
             fp16: Optional[bool] = None,
             argument_kwargs: Optional[Dict] = None,
             trainer_kwargs: Optional[Dict] = None,
-            loss_kwargs: Optional[Dict] = None):
+            loss_kwargs: Optional[Dict] = None,
+            apply_tdmse: bool = False):
         """
         Fit using AnglE.
 
@@ -1173,6 +1356,7 @@ class AnglE:
             refer to: https://huggingface.co/docs/transformers/v4.37.0/en/main_classes/trainer#transformers.TrainingArguments
         :param trainer_kwargs: Optional[Dict]. kwargs for AngleTrainer.
         :param loss_kwargs: Optional[Dict]. kwargs for AngleLoss.
+        :param apply_tdmse: bool, whether apply TDMSE training.
         """  # NOQA
         if output_dir is not None:
             os.makedirs(output_dir, exist_ok=True)
@@ -1198,7 +1382,9 @@ class AnglE:
                                                  partial(self.evaluate, batch_size=batch_size, device=self.device),
                                                  save_dir=best_ckpt_dir)
             callbacks = [evaluate_callback]
-        trainer = AngleTrainer(
+
+        CustomTrainer = AngleTDMSETrainer if apply_tdmse else AngleTrainer
+        trainer = CustomTrainer(
             pooler=self.pooler,
             model=self.backbone,
             dataset_format=self.detect_dataset_format(train_ds),
@@ -1275,6 +1461,8 @@ class AnglE:
                max_length: Optional[int] = None,
                end_with_eos: bool = False,
                to_numpy: bool = True,
+               layer_index: int = -1,
+               embedding_size: Optional[int] = None,
                device: Optional[Any] = None):
         """
         encode texts.
@@ -1282,6 +1470,8 @@ class AnglE:
         :param inputs: Union[List[str], Tuple[str], List[Dict], str]. Input texts. Required.
         :param max_length: Optional[int]. Default None.
         :param to_numpy: bool. Default True.
+        :param layer_index: int. Obtain specific layer's sentence embeddings (for 2DMSE).
+        :param embedding_size: Optional[int]. Specify embedding size (for 2DMSE).
         :param device: Optional[Any]. Default None.
         """
         if device is None:
@@ -1315,7 +1505,7 @@ class AnglE:
                 return_tensors='pt')
         tok.to(device)
         with torch.no_grad():
-            output = self.pooler(tok)
+            output = self.pooler(tok, layer_index=layer_index, embedding_size=embedding_size)
         if to_numpy:
             return output.float().detach().cpu().numpy()
         return output
