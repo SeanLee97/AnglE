@@ -764,7 +764,6 @@ class AngleTrainer(Trainer):
             )
             loss += alignment_loss
         else:
-            labels = inputs.pop("labels", None)
             outputs = self.pooler(inputs)
             loss = self.loss_fct(labels, outputs)
 
