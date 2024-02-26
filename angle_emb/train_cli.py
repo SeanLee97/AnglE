@@ -166,14 +166,17 @@ def main():
         argument_kwargs['report_to'] = 'wandb'
 
     trainer_kwargs = None
-    if args.apply_tdmse:
+    if args.fixed_teacher_name_or_path is not None:
         trainer_kwargs = {
+            'fixed_teacher_name_or_path': args.fixed_teacher_name_or_path
+        }
+    if args.apply_tdmse:
+        trainer_kwargs = dict(trainer_kwargs, **{
             'apply_tdmse_kl': args.apply_tdmse_kl,
             'tdmse_kl_temperature': args.tdmse_kl_temperature,
             'tdmse_teacher_lambda': args.tdmse_teacher_lambda,
             'tdmse_student_lambda': args.tdmse_student_lambda,
-            'fixed_teacher_name_or_path': args.fixed_teacher_name_or_path,
-        }
+        })
 
     model.fit(
         train_ds=train_ds,
