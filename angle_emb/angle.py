@@ -744,6 +744,7 @@ class AngleTrainer(Trainer):
                 pooling_strategy='all',
                 padding_strategy=self.pooler.padding_strategy,
                 is_llm=False)
+            self.kl_loss_fct = nn.KLDivLoss(reduction='batchmean')
             logger.info(f'Train with alignment, teacher={fixed_teacher_name_or_path}')
 
     def compute_loss(self, model, inputs, return_outputs=False):
