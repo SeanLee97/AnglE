@@ -171,6 +171,7 @@ def main():
             'fixed_teacher_name_or_path': args.fixed_teacher_name_or_path
         }
     if args.apply_tdmse:
+        trainer_kwargs = trainer_kwargs or {}
         trainer_kwargs = dict(trainer_kwargs, **{
             'apply_tdmse_kl': args.apply_tdmse_kl,
             'tdmse_kl_temperature': args.tdmse_kl_temperature,
