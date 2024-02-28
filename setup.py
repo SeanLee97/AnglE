@@ -42,7 +42,7 @@ setup(
     tests_require=test_requirements,
     entry_points={
         'console_scripts': [
-            'angle-trainer = angle_emb.train_cli:__main__',
+            'angle-trainer = angle_emb.train_cli:main',
         ],
     },
 )
