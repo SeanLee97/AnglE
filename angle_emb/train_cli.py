@@ -43,8 +43,8 @@ parser.add_argument('--w2', type=float, default=1.0,
                     help='Specify w2 (ibn), default 1.0')
 parser.add_argument('--w3', type=float, default=1.0,
                     help='Specify w3 (angle), default 1.0')
-parser.add_argument('--angle_tau', type=float, default=1.0,
-                    help='Specify angle_tau, default 1.0')
+parser.add_argument('--angle_tau', type=float, default=20.0,
+                    help='Specify angle_tau, default 20.0')
 parser.add_argument('--cosine_tau', type=float, default=20.0,
                     help='Specify cosine_tau, defaut 20.0')
 parser.add_argument('--ibn_tau', type=float, default=20.0,
