@@ -4,7 +4,6 @@ import os
 import re
 import sys
 import json
-import math
 import copy
 import random
 from functools import partial
@@ -866,7 +865,7 @@ class AngleTDMSETrainer(AngleTrainer):
             kl_loss = self.kl_loss_fct(
                 F.log_softmax(student_outputs / self.tdmse_kl_temperature, dim=-1),
                 F.softmax(teacher_kl_outputs / self.tdmse_kl_temperature, dim=-1)
-            ) * self.tdmse_kl_temperature * math.log(2 + sample_layer)
+            ) * self.tdmse_kl_temperature
             loss1 += kl_loss
 
         # feature
