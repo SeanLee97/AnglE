@@ -5,6 +5,7 @@ import re
 import sys
 import json
 import math
+import copy
 import random
 from functools import partial
 from typing import Any, Dict, Optional, List, Union, Tuple, Callable
@@ -1240,6 +1241,8 @@ class AnglE:
             padding_strategy=self.tokenizer.padding_side,
             is_llm=self.is_llm)
 
+        # full_backbone is used to 2DMSE inference
+        self.full_backbone = None
         self.__cfg = {
             'model_name_or_path': model_name_or_path,
             'max_length': max_length,
@@ -1500,6 +1503,12 @@ class AnglE:
         :param embedding_size: Optional[int]. Specify embedding size (for 2DMSE).
         :param device: Optional[Any]. Default None.
         """
+        if layer_index != -1 and self.full_backbone is None:
+            self.full_backbone = copy.deepcopy(self.backbone)
+
+        if layer_index != -1:
+            self.backbone.encoder.layer = self.full_backbone.encoder.layer[:layer_index]
+
         if device is None:
             device = self.device
         self.backbone.eval()
