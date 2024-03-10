@@ -166,7 +166,7 @@ print(vecs)
 2) transformers
 
 ```python
-from angle_emb import AnglE
+from angle_emb import AnglE, Prompts
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel, PeftConfig
 
