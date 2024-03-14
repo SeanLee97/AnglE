@@ -99,7 +99,7 @@ python -m pip install -U angle-emb
 
 1) For Retrieval Purposes
 
-For retrieval purposes, please use the prompt `Prompts.C`.
+For retrieval purposes, please use the prompt `Prompts.C` for the query (⚠️：no need to apply prompt for documents).
 
 ```python
 from angle_emb import AnglE, Prompts
@@ -139,7 +139,7 @@ For example, a sentence semantically similar to "How about ChatGPT?" could be "W
 
 To distinguish between these two types of tasks, we use different prompts. 
 
-For retrieval tasks, we use the prompt "Represent this sentence for searching relevant passages: {text}" (Prompts.C in angle_emb). 
+For retrieval tasks, we use the prompt "Represent this sentence for searching relevant passages: {text}" (Prompts.C in angle_emb) for the query (**no need to apply it for the documents**). 
 
 For non-retrieval tasks, we set the prompt to empty, i.e., just input your text without specifying a prompt.
 
