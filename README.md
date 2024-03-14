@@ -99,7 +99,7 @@ python -m pip install -U angle-emb
 
 1) For Retrieval Purposes
 
-For retrieval purposes, please use the prompt `Prompts.C`.
+For retrieval purposes, please use the prompt `Prompts.C` for the query (⚠️：no need to apply prompt for documents).
 
 ```python
 from angle_emb import AnglE, Prompts
