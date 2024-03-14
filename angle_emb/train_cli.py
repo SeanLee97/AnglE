@@ -13,7 +13,7 @@ from angle_emb.utils import logger
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model_name_or_path', type=str, default='roberta-large',
+parser.add_argument('--model_name_or_path', type=str, required=True,
                     help='Specify model_name_or_path to set transformer backbone, default roberta-large')
 parser.add_argument('--pretrained_model_path', type=str, default=None,
                     help='Specify pretrained model path to load pretrained model, default None')
@@ -79,7 +79,8 @@ parser.add_argument('--batch_size', type=int, default=32, help='Specify batch si
 parser.add_argument('--maxlen', type=int, default=512, help='Specify max length, default 512')
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                     help='Specify gradient_accumulation_steps, default 1')
-parser.add_argument('--torch_dtype', type=str, default=None, help='Specify torch_dtype, default 1')
+parser.add_argument('--torch_dtype', type=str, default='float32',
+                    help='Specify torch_dtype from `auto`, `float32`, `float16`, default float32')
 parser.add_argument('--fp16', type=bool, default=None, choices=[0, 1],
                     help='Specify fp16, choices [0, 1], default None')
 parser.add_argument('--push_to_hub', type=int, default=0, choices=[0, 1], help='Specify push_to_hub, default 0')
@@ -119,6 +120,11 @@ if args.wandb_project is not None:
     os.environ['WANDB_LOG_MODEL'] = args.wandb_log_model
 
     wandb.login()
+
+if args.torch_dtype == 'float32':
+    args.torch_dtype = torch.float32
+elif args.torch_dtype == 'float16':
+    args.torch_dtype = torch.float16
 
 
 def main():

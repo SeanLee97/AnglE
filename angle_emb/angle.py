@@ -1076,6 +1076,9 @@ class AnglE:
                         'You can change this setting by manually configuring the `apply_bfloat16`.')
             self.apply_bfloat16 = True
 
+        if torch_dtype is None:
+            torch_dtype = torch.float32 if train_mode else None
+
         lora_config = None
         if self.apply_lora:
             lora_config = {
