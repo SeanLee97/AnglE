@@ -11,7 +11,7 @@
 
 
 <a href="https://arxiv.org/abs/2309.12871">
-    <img src="https://img.shields.io/badge/Arxiv-2306.06843-yellow.svg?style=flat-square" alt="https://arxiv.org/abs/2309.12871" />
+    <img src="https://img.shields.io/badge/Arxiv-2309.12871-yellow.svg?style=flat-square" alt="https://arxiv.org/abs/2309.12871" />
 </a>
 <a href="https://pypi.org/project/angle_emb/">
     <img src="https://img.shields.io/pypi/v/angle_emb?style=flat-square" alt="PyPI version" />
