@@ -191,6 +191,12 @@ def main():
             'tdmse_teacher_lambda': args.tdmse_teacher_lambda,
             'tdmse_student_lambda': args.tdmse_student_lambda,
         })
+      
+    # temporarily overloading to allow streaming
+    trainer_kwargs={
+            'max_steps':2205000,
+            'dispatch_batches':False
+            }
 
     model.fit(
         train_ds=train_ds,
