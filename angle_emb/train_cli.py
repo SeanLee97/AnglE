@@ -157,7 +157,7 @@ def main():
     logger.info('Processing train...')
     train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
         AngleDataTokenizer(model.tokenizer, model.max_length,
-                           prompt_template=args.prompt_template), num_proc=args.workers)
+                           prompt_template=args.prompt_template))
 
     valid_ds = None
     if valid_ds is None and args.valid_name_or_path is not None:
