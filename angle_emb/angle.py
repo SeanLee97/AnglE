@@ -1356,6 +1356,7 @@ class AnglE:
             logging_steps: int = 10,
             eval_steps: Optional[int] = None,
             save_steps: int = 100,
+            max_steps: int=-1,
             save_strategy: str = 'steps',
             save_total_limit: int = 10,
             gradient_accumulation_steps: int = 1,
