@@ -148,9 +148,9 @@ def main():
         model.backbone.set_start_bilayer_index(args.start_bilayer_index)
 
     if os.path.exists(args.train_name_or_path):
-        ds = load_dataset('json', data_files=[args.train_name_or_path],num_proc=args.workers, streaming=True)
+        ds = load_dataset('json', data_files=[args.train_name_or_path], streaming=True)
     else:
-        ds = load_dataset(args.train_name_or_path, args.train_subset_name,num_proc=args.workers, streaming=True)
+        ds = load_dataset(args.train_name_or_path, args.train_subset_name, streaming=True)
 
     logger.info('Dataset overview:')
     print(ds)
