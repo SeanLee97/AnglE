@@ -174,8 +174,14 @@ def main():
             valid_ds = load_dataset('json', data_files=[args.valid_name_or_path])
         else:
             valid_ds = load_dataset(args.valid_name_or_path, args.valid_subset_name)
-        valid_ds = valid_ds[args.valid_subset_name or 'train'].map(
-            AngleDataTokenizer(model.tokenizer, model.max_length,
+        
+        if args.streaming:
+            valid_ds = valid_ds[args.valid_subset_name or 'train'].map(
+              AngleDataTokenizer(model.tokenizer, model.max_length,
+                               prompt_template=args.prompt_template))
+          else:
+            valid_ds = valid_ds[args.valid_subset_name or 'train'].map(
+              AngleDataTokenizer(model.tokenizer, model.max_length,
                                prompt_template=args.prompt_template), num_proc=args.workers)
 
     argument_kwargs = {}
@@ -200,11 +206,7 @@ def main():
             'tdmse_student_lambda': args.tdmse_student_lambda,
         })
       
-    # temporarily overloading to allow streaming
-    trainer_kwargs={
-            'max_steps':2205000,
-            'dispatch_batches':False
-            }
+
 
     model.fit(
         train_ds=train_ds,
