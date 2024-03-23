@@ -1433,6 +1433,7 @@ class AnglE:
                 logging_steps=logging_steps,
                 save_strategy=save_strategy,
                 eval_steps=eval_steps,
+                max_steps=max_steps,
                 save_steps=save_steps,
                 output_dir=output_dir,
                 save_total_limit=save_total_limit,
