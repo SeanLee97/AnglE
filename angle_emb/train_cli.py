@@ -74,9 +74,12 @@ parser.add_argument('--logging_steps', type=int, default=100,
 parser.add_argument('--pooling_strategy', type=str, default='cls',
                     help='Specify pooling_strategy from [`cls`, `last`, `avg`, `cls_avg`, `max`], default `cls`')
 parser.add_argument('--epochs', type=int, default=20, help='Specify epochs, default 20')
+parser.add_argument('--max_steps', type=int, default=-1, help='Specify max steps, default -1 (Automatically calculated from epochs)')
 parser.add_argument('--save_steps', type=int, default=100, help='Specify save_steps, default 1000')
 parser.add_argument('--batch_size', type=int, default=32, help='Specify batch size, default 32')
 parser.add_argument('--maxlen', type=int, default=512, help='Specify max length, default 512')
+parser.add_argument('--streaming', action='store_true', default=False,
+                    help='Flag to enable streaming mode (default: False)')
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                     help='Specify gradient_accumulation_steps, default 1')
 parser.add_argument('--torch_dtype', type=str, default='float32',
@@ -148,16 +151,21 @@ def main():
         model.backbone.set_start_bilayer_index(args.start_bilayer_index)
 
     if os.path.exists(args.train_name_or_path):
-        ds = load_dataset('json', data_files=[args.train_name_or_path], streaming=True)
+        ds = load_dataset('json', data_files=[args.train_name_or_path], streaming=args.streaming)
     else:
-        ds = load_dataset(args.train_name_or_path, args.train_subset_name, streaming=True)
+        ds = load_dataset(args.train_name_or_path, args.train_subset_name, streaming=args.streaming)
 
     logger.info('Dataset overview:')
     print(ds)
     logger.info('Processing train...')
-    train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
+    if args.streaming:
+      train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
         AngleDataTokenizer(model.tokenizer, model.max_length,
                            prompt_template=args.prompt_template))
+    else:
+       train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
+        AngleDataTokenizer(model.tokenizer, model.max_length,
+                           prompt_template=args.prompt_template), num_proc=args.workers)
 
     valid_ds = None
     if valid_ds is None and args.valid_name_or_path is not None:
@@ -206,6 +214,7 @@ def main():
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         save_steps=args.save_steps,
+        max_steps=args.max_steps,
         warmup_steps=args.warmup_steps,
         logging_steps=args.logging_steps,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
