@@ -74,7 +74,8 @@ parser.add_argument('--logging_steps', type=int, default=100,
 parser.add_argument('--pooling_strategy', type=str, default='cls',
                     help='Specify pooling_strategy from [`cls`, `last`, `avg`, `cls_avg`, `max`], default `cls`')
 parser.add_argument('--epochs', type=int, default=20, help='Specify epochs, default 20')
-parser.add_argument('--max_steps', type=int, default=-1, help='Specify max steps, default -1 (Automatically calculated from epochs)')
+parser.add_argument('--max_steps', type=int, default=-1,
+                    help='Specify max steps, default -1 (Automatically calculated from epochs)')
 parser.add_argument('--save_steps', type=int, default=100, help='Specify save_steps, default 1000')
 parser.add_argument('--batch_size', type=int, default=32, help='Specify batch size, default 32')
 parser.add_argument('--maxlen', type=int, default=512, help='Specify max length, default 512')
@@ -159,13 +160,12 @@ def main():
     print(ds)
     logger.info('Processing train...')
     if args.streaming:
-      train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
-        AngleDataTokenizer(model.tokenizer, model.max_length,
-                           prompt_template=args.prompt_template))
+        train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
+            AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template))
     else:
-       train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
-        AngleDataTokenizer(model.tokenizer, model.max_length,
-                           prompt_template=args.prompt_template), num_proc=args.workers)
+        train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
+            AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template),
+            num_proc=args.workers)
 
     valid_ds = None
     if valid_ds is None and args.valid_name_or_path is not None:
@@ -174,15 +174,15 @@ def main():
             valid_ds = load_dataset('json', data_files=[args.valid_name_or_path])
         else:
             valid_ds = load_dataset(args.valid_name_or_path, args.valid_subset_name)
-        
+
         if args.streaming:
             valid_ds = valid_ds[args.valid_subset_name or 'train'].map(
               AngleDataTokenizer(model.tokenizer, model.max_length,
-                               prompt_template=args.prompt_template))
-          else:
+                                 prompt_template=args.prompt_template))
+        else:
             valid_ds = valid_ds[args.valid_subset_name or 'train'].map(
               AngleDataTokenizer(model.tokenizer, model.max_length,
-                               prompt_template=args.prompt_template), num_proc=args.workers)
+                                 prompt_template=args.prompt_template), num_proc=args.workers)
 
     argument_kwargs = {}
     if args.push_to_hub:
@@ -191,6 +191,8 @@ def main():
         argument_kwargs['hub_model_id'] = args.hub_model_id
     if args.wandb_project is not None:
         argument_kwargs['report_to'] = 'wandb'
+    if args.max_steps > 0:
+        argument_kwargs['max_steps'] = args.max_steps
 
     trainer_kwargs = None
     if args.fixed_teacher_name_or_path is not None:
@@ -205,8 +207,6 @@ def main():
             'tdmse_teacher_lambda': args.tdmse_teacher_lambda,
             'tdmse_student_lambda': args.tdmse_student_lambda,
         })
-      
-
 
     model.fit(
         train_ds=train_ds,
@@ -216,7 +216,6 @@ def main():
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         save_steps=args.save_steps,
-        max_steps=args.max_steps,
         warmup_steps=args.warmup_steps,
         logging_steps=args.logging_steps,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
