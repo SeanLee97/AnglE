@@ -291,6 +291,17 @@ corrcoef, accuracy = angle.evaluate(test_ds, device=angle.device)
 print('corrcoef:', corrcoef)
 ```
 
+### 4. Fine-tuning Tips 💡
+
+1) if your dataset format is `DatasetFormats.A`, it is recommended to slightly increase the weight for `w1` or slightly decrease the weight for `w2`.
+
+2) if your dataset format is `DatasetFormats.B`, it is recommended to set `w1` to 0, and increase the weight for `w2` such as 10 and 20. The `angle_tau` can be set to 20.0.
+
+3) if your dataset format is `DatasetFormats.C`, only `w2` and `ibn_tau` are effective. You don't need to tune other parameters.
+
+4) To alleviate information forgetting in fine-tuning, it is better to specify the `fixed_teacher_name_or_path`. If the `fixed_teacher_name_or_path` equals `model_name_or_path`, it will conduct self-distillation. **It is worth to note that** `fixed_teacher_name_or_path` has to have the same tokenizer as `model_name_or_path`. Or it will lead to unexpected results.
+
+
 # Citation
 
 You are welcome to use our code and pre-trained models. If you use our code and pre-trained models, please support us by citing our work as follows:
