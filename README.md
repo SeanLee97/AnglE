@@ -4,11 +4,12 @@
 
 > It is Angle 📐, not Angel 👼.
 
-🔥 **A New SOTA** for Semantic Textual Similarity! 
+📢 **Train/Infer Powerful Sentence Embedding Models with AnglE.**
+AnglE enables you to train state-of-the-art BERT-based or LLM-based sentence embeddings with just a few lines of code. 
+AnglE is also a general inference framework for sentence embedding, allowing you to infer a variety of transformer-based sentence embeddings.
 
 
-🔥 **Our universal sentence embedding [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) achieves SOTA on the [MTEB Leaderboard](https://huggingface.co/spaces/mteb/leaderboard) with an average score of 64.64!**
-
+## 🏆 Achievements
 
 <a href="https://arxiv.org/abs/2309.12871">
     <img src="https://img.shields.io/badge/Arxiv-2309.12871-yellow.svg?style=flat-square" alt="https://arxiv.org/abs/2309.12871" />
@@ -32,31 +33,27 @@
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/angle-optimized-text-embeddings/semantic-textual-similarity-on-sts-benchmark)](https://paperswithcode.com/sota/semantic-textual-similarity-on-sts-benchmark?p=angle-optimized-text-embeddings)
 
 
-<details>
-<summary>📊 Results on MTEB Leaderboard [click to expand]</summary>
-<p align='center'>
-<img src='assets/UAE-MTEB.png'>
-</p>
-</details>
+📅  Mar 13, 2024 | Paper "[BeLLM: Backward Dependency Enhanced Large Language Model for Sentence Embeddings](https://arxiv.org/abs/2311.05296)" accepted by NAACL 2024 Main Conference.
 
-<details>
-<summary>📊 Results on STS benchmark [click to expand]</summary>
-<p align='center'>
-<img src='assets/angle-results.png'>
-</p>
-</details>
 
-## 🤗 Pretrained Models
+📅  Mar 8, 2024 | 🍞 [mixedbread's embedding](https://www.mixedbread.ai/blog/mxbai-embed-large-v1) ([mixedbread-ai/mxbai-embed-large-v1](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1)) achieves SOTA on the [MTEB Leaderboard](https://huggingface.co/spaces/mteb/leaderboard) with an average score of **64.68**! The model is trained using AnglE.
+
+
+📅  Dec 4, 2023 | Our universal sentence embedding [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) achieves SOTA on the [MTEB Leaderboard](https://huggingface.co/spaces/mteb/leaderboard) with an average score of **64.64**! The model is trained using AnglE.
+
+
+📅 Dec, 2023 | **A New SOTA** for Semantic Textual Similarity! 
+
+
+## 🤗 Official Pretrained Models
 | 🤗 HF | LoRA Weight | Dependent Backbone | LLM | Language | Prompt | Pooling Strategy | Examples |
 |----|------|------|------|------|------|------|------|
 | [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) |  N | N | N | EN | `Prompts.C` for retrieval purposes, `None` for others | cls | [![Seach Demo](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1WOYD6f8gb_wpkUm_57K8pEDgjlGJd6oB?usp=drive_link) |
 | [SeanLee97/angle-llama-13b-nli](https://huggingface.co/SeanLee97/angle-llama-13b-nli) | Y |  NousResearch/Llama-2-13b-hf | Y | EN | `Prompts.A` | last token | / | 
 | [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) | Y |  NousResearch/Llama-2-7b-hf | Y | EN | `Prompts.A` | last token | / |
-| [SeanLee97/angle-llama-7b-nli-20231027](https://huggingface.co/SeanLee97/angle-llama-7b-nli-20231027) | Y |  NousResearch/Llama-2-7b-hf | Y | EN | `Prompts.A` | last token | / |
 | [SeanLee97/angle-bert-base-uncased-nli-en-v1](https://huggingface.co/SeanLee97/angle-bert-base-uncased-nli-en-v1) | N |  N | N | EN | N | `cls_avg` | / |
-| [SeanLee97/angle-roberta-wwm-base-zhnli-v1](https://huggingface.co/SeanLee97/angle-roberta-wwm-base-zhnli-v1) | N |  N | N | ZH-CN | N | `cls` | / |
-| [SeanLee97/angle-llama-7b-zhnli-v1](https://huggingface.co/SeanLee97/angle-llama-7b-zhnli-v1) | Y |  NousResearch/Llama-2-7b-hf | Y | ZH-CN | `Prompts.B` | last token | / |
  
+<details><summary>💡 Tips</summary>
 💡 If the selected model is a LoRA weight, it must specify the corresponding dependent backbone.
 
 For our STS Experiment, please refer to https://github.com/SeanLee97/AnglE/tree/main/examples/NLI
@@ -75,19 +72,7 @@ For our STS Experiment, please refer to https://github.com/SeanLee97/AnglE/tree/
 | [SeanLee97/angle-bert-base-uncased-nli-en-v1](https://huggingface.co/SeanLee97/angle-bert-base-uncased-nli-en-v1) | 75.09 | 85.56 | 80.66 | 86.44 | 82.47 | 85.16 | 81.23 | 82.37 |
 
 
-### Chinese STS Results
-
-| Model | ATEC | BQ	| LCQMC | PAWSX | STS-B | SOHU-dd | SOHU-dc | Avg. |
-| ------- |-------|-------|-------|-------|-------|--------------|-----------------|-------|
-| ^[shibing624/text2vec-bge-large-chinese](https://huggingface.co/shibing624/text2vec-bge-large-chinese) | 38.41 | 61.34 | 71.72 | 35.15 | 76.44 | 71.81 | 63.15 | 59.72 |
-| ^[shibing624/text2vec-base-chinese-paraphrase](https://huggingface.co/shibing624/text2vec-base-chinese-paraphrase) |	44.89 | 63.58 | 74.24 | 40.90 | 78.93 | 76.70 | 63.30 | 63.08 |
-| [SeanLee97/angle-roberta-wwm-base-zhnli-v1](https://huggingface.co/SeanLee97/angle-roberta-wwm-base-zhnli-v1) | 49.49 | 72.47 | 78.33 | 59.13 | 77.14 |    72.36     |      60.53      | **67.06** |
-| [SeanLee97/angle-llama-7b-zhnli-v1](https://huggingface.co/SeanLee97/angle-llama-7b-zhnli-v1) | 50.44 | 71.95 | 78.90 | 56.57 | 81.11 | 68.11 | 52.02 | 65.59 |
-
-^ denotes baselines, their results are retrieved from: https://github.com/shibing624/text2vec
-
-
-## Usage
+## 🚀 Quick Start
 
 AnglE supports two APIs, one is the `transformers` API, the other is the `AnglE` API. If you want to use the `AnglE` API, please install AnglE first:
 
@@ -95,33 +80,47 @@ AnglE supports two APIs, one is the `transformers` API, the other is the `AnglE`
 python -m pip install -U angle-emb
 ```
 
-### UAE
+### 1. Load BERT-based Models
 
 1) For Retrieval Purposes
 
-For retrieval purposes, please use the prompt `Prompts.C` for the query (⚠️：no need to apply prompt for documents).
+For retrieval purposes, please use the prompt `Prompts.C` for query (not document).
 
 ```python
 from angle_emb import AnglE, Prompts
+from angle_emb.utils import cosine_similarity
+
 
 angle = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').cuda()
-angle.set_prompt(prompt=Prompts.C)
-vec = angle.encode({'text': 'hello world'}, to_numpy=True)
-print(vec)
-vecs = angle.encode([{'text': 'hello world1'}, {'text': 'hello world2'}], to_numpy=True)
-print(vecs)
+# when specify prompt, the inputs should be a list of dict with key 'text'
+qv = angle.encode({'text': 'what is the weather?'}, to_numpy=True, prompt=Prompts.C)
+doc_vecs = angle.encode([
+    'The weather is great!',
+    'it is rainy today.',
+    'i am going to bed'
+], to_numpy=True)
+
+for dv in doc_vecs:
+    print(cosine_similarity(qv[0], dv))
 ```
 
 2) For non-Retrieval Purposes
 
 ```python
 from angle_emb import AnglE
+from angle_emb.utils import cosine_similarity
+
 
 angle = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').cuda()
-vec = angle.encode('hello world', to_numpy=True)
-print(vec)
-vecs = angle.encode(['hello world1', 'hello world2'], to_numpy=True)
-print(vecs)
+doc_vecs = angle.encode([
+    'The weather is great!',
+    'The weather is very good!',
+    'i am going to bed'
+])
+
+for i, dv1 in enumerate(doc_vecs):
+    for dv2 in doc_vecs[i+1:]:
+        print(cosine_similarity(dv1, dv2))
 ```
 
 <details>
@@ -146,78 +145,37 @@ For non-retrieval tasks, we set the prompt to empty, i.e., just input your text 
 So, if your scenario is retrieval-related, it is highly recommended to set the prompt with angle.set_prompt(prompt=Prompts.C). If not, leave the prompt empty or use angle.set_prompt(prompt=None).
 </details>
 
-### Angle-LLaMA
+### 2. Load LoRA-based Models
 
 1) AnglE
 ```python
 from angle_emb import AnglE, Prompts
 
-angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf', pretrained_lora_path='SeanLee97/angle-llama-7b-nli-v2')
+angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf',
+                              pretrained_lora_path='SeanLee97/angle-llama-7b-nli-v2',
+                              pooling_strategy='last')
 
 print('All predefined prompts:', Prompts.list_prompts())
-angle.set_prompt(prompt=Prompts.A)
-print('prompt:', angle.prompt)
-vec = angle.encode({'text': 'hello world'}, to_numpy=True)
+vec = angle.encode({'text': 'hello world'}, to_numpy=True, prompt=Prompts.A)
 print(vec)
-vecs = angle.encode([{'text': 'hello world1'}, {'text': 'hello world2'}], to_numpy=True)
+vecs = angle.encode([{'text': 'hello world1'}, {'text': 'hello world2'}], to_numpy=True, prompt=Prompts.A)
 print(vecs)
 ```
 
-2) transformers
+### 3. Load Third-party Models w/ angle_emb
 
-```python
-from angle_emb import AnglE, Prompts
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import PeftModel, PeftConfig
+You can load any transformer-based third-party models such as `mixedbread-ai/mxbai-embed-large-v1`, `sentence-transformers/all-MiniLM-L6-v2`, and `BAAI/bge-large-en-v1.5` using `angle_emb`.
 
-peft_model_id = 'SeanLee97/angle-llama-7b-nli-v2'
-config = PeftConfig.from_pretrained(peft_model_id)
-tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path)
-model = AutoModelForCausalLM.from_pretrained(config.base_model_name_or_path).bfloat16().cuda()
-model = PeftModel.from_pretrained(model, peft_model_id).cuda()
+Here is an example:
 
-def decorate_text(text: str):
-    return Prompts.A.format(text=text)
-
-inputs = 'hello world!'
-tok = tokenizer([decorate_text(inputs)], return_tensors='pt')
-for k, v in tok.items():
-    tok[k] = v.cuda()
-vec = model(output_hidden_states=True, **tok).hidden_states[-1][:, -1].float().detach().cpu().numpy()
-print(vec)
-```
-
-### Angle-BERT
-
-1) AnglE
 ```python
 from angle_emb import AnglE
 
-angle = AnglE.from_pretrained('SeanLee97/angle-bert-base-uncased-nli-en-v1', pooling_strategy='cls_avg').cuda()
-vec = angle.encode('hello world', to_numpy=True)
-print(vec)
-vecs = angle.encode(['hello world1', 'hello world2'], to_numpy=True)
-print(vecs)
-```
-
-2) transformers
-
-```python
-import torch
-from transformers import AutoModel, AutoTokenizer
-
-model_id = 'SeanLee97/angle-bert-base-uncased-nli-en-v1'
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id).cuda()
-
-inputs = 'hello world!'
-tok = tokenizer([inputs], return_tensors='pt')
-for k, v in tok.items():
-    tok[k] = v.cuda()
-hidden_state = model(**tok).last_hidden_state
-vec = (hidden_state[:, 0] + torch.mean(hidden_state, dim=1)) / 2.0
+model = AnglE.from_pretrained('mixedbread-ai/mxbai-embed-large-v1', pooling_strategy='cls').cuda()
+vec = model.encode('hello world', to_numpy=True)
 print(vec)
 ```
+
 
 ## Custom Train
 
@@ -275,12 +233,12 @@ angle.fit(
     warmup_steps=0,
     gradient_accumulation_steps=1,
     loss_kwargs={
-        'w1': 1.0,
-        'w2': 1.0,
-        'w3': 1.0,
+        'cosine_w': 1.0,
+        'ibn_w': 1.0,
+        'angle_w': 1.0,
         'cosine_tau': 20,
         'ibn_tau': 20,
-        'angle_tau': 1.0
+        'angle_tau': 20.0
     },
     fp16=True,
     logging_steps=100
@@ -293,13 +251,13 @@ print('corrcoef:', corrcoef)
 
 ### 4. Fine-tuning Tips 💡
 
-1) if your dataset format is `DatasetFormats.A`, it is recommended to slightly increase the weight for `w1` or slightly decrease the weight for `w2`.
+1) if your dataset format is `DatasetFormats.A`, it is recommended to slightly increase the weight for `cosine_w` or slightly decrease the weight for `ibn_w`.
 
-2) if your dataset format is `DatasetFormats.B`, it is recommended to set `w1` to 0, and increase the weight for `w2` such as 10 and 20. The `angle_tau` can be set to 20.0.
+2) if your dataset format is `DatasetFormats.B`, it is recommended to set `cosine_w` to 0, and increase the weight for `ibn_w` such as 10 and 20. The `angle_tau` can be set to 20.0.
 
-3) if your dataset format is `DatasetFormats.C`, only `w2` and `ibn_tau` are effective. You don't need to tune other parameters.
+3) if your dataset format is `DatasetFormats.C`, only `ibn_w` and `ibn_tau` are effective. You don't need to tune other parameters.
 
-4) To alleviate information forgetting in fine-tuning, it is better to specify the `fixed_teacher_name_or_path`. If the `fixed_teacher_name_or_path` equals `model_name_or_path`, it will conduct self-distillation. **It is worth to note that** `fixed_teacher_name_or_path` has to have the same tokenizer as `model_name_or_path`. Or it will lead to unexpected results.
+4) To alleviate information forgetting in fine-tuning, it is better to specify the `teacher_name_or_path`. If the `teacher_name_or_path` equals `model_name_or_path`, it will conduct self-distillation. **It is worth to note that** `teacher_name_or_path` has to have the same tokenizer as `model_name_or_path`. Or it will lead to unexpected results.
 
 
 # Citation

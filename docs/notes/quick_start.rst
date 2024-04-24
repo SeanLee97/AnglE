@@ -7,7 +7,7 @@ A few lines of code to generate sentence embeddings using AnglE.
 
 .. code-block:: bash
 
-    python -m pip install -U angle_emb
+    python -m pip install -U angle-emb
 
 
 Other installation methods, please refer to the `Installation` section.
