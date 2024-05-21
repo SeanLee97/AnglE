@@ -6,9 +6,7 @@
 
 
 📢 **Train/Infer Powerful Sentence Embeddings with AnglE.**
-This library is from the paper: [AnglE: Angle-optimized Text Embeddings](https://arxiv.org/abs/2309.12871) <a href="https://arxiv.org/abs/2309.12871">
-    <img src="https://img.shields.io/badge/Arxiv-2309.12871-yellow.svg?style=flat-square" alt="https://arxiv.org/abs/2309.12871" />
-</a>. It allows you to train state-of-the-art BERT/LLM-based sentence embeddings with just a few lines of code. AnglE is also a general sentence embedding inference framework, allowing you to infer a variety of transformer-based sentence embeddings.
+This library is from the paper: [AnglE: Angle-optimized Text Embeddings](https://arxiv.org/abs/2309.12871). It allows for training state-of-the-art BERT/LLM-based sentence embeddings with just a few lines of code. AnglE is also a general sentence embedding inference framework, allowing for infering a variety of transformer-based sentence embeddings.
 
 ## ✨ Features
 
@@ -34,6 +32,9 @@ This library is from the paper: [AnglE: Angle-optimized Text Embeddings](https:/
 
 ## 🏆 Achievements
 
+<a href="https://arxiv.org/abs/2309.12871">
+    <img src="https://img.shields.io/badge/Arxiv-2309.12871-yellow.svg?style=flat-square" alt="https://arxiv.org/abs/2309.12871" />
+</a>
 <a href="https://pypi.org/project/angle_emb/">
     <img src="https://img.shields.io/pypi/v/angle_emb?style=flat-square" alt="PyPI version" />
 </a>
@@ -291,6 +292,7 @@ You are welcome to use our code and pre-trained models. If you use our code and 
 
 | 📅 | Description |
 |----|------|
+| 2024 May 21 |  support Espresso Sentence Embeddings  |
 | 2024 Feb 7 |  support training with only positive pairs (`DatasetFormats.C`)  |
 | 2023 Dec 4 |  Release a universal English sentence embedding model: [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1)  |
 | 2023 Nov 2 |  Release an English pretrained model: `SeanLee97/angle-llama-13b-nli` |
