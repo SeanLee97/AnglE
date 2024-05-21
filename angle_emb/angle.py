@@ -5,7 +5,7 @@ import re
 import sys
 import json
 import copy
-import random
+import math
 from functools import partial
 from typing import Any, Dict, Optional, List, Union, Tuple, Callable
 from dataclasses import dataclass
@@ -29,7 +29,7 @@ from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import PaddingStrategy
 from peft import (
     get_peft_model, LoraConfig, TaskType, PeftModel,
-    prepare_model_for_kbit_training
+    prepare_model_for_kbit_training,
 )
 from peft.tuners.lora import LoraLayer
 
@@ -113,7 +113,7 @@ def cosine_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 20.0) -
     return torch.logsumexp(y_pred, dim=0)
 
 
-def angle_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 1.0):
+def angle_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 1.0, pooling_strategy: str = 'sum'):
     """
     Compute angle loss
 
@@ -148,7 +148,13 @@ def angle_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 1.0):
     im /= (dz / dw)
 
     y_pred = torch.concat((re, im), dim=1)
-    y_pred = torch.abs(torch.sum(y_pred, dim=1)) * tau  # absolute delta angle
+    if pooling_strategy == 'sum':
+        pooling = torch.sum(y_pred, dim=1)
+    elif pooling_strategy == 'mean':
+        pooling = torch.mean(y_pred, dim=1)
+    else:
+        raise ValueError(f'Unsupported pooling strategy: {pooling_strategy}')
+    y_pred = torch.abs(pooling) * tau  # absolute delta angle
     y_pred = y_pred[:, None] - y_pred[None, :]
     y_pred = (y_pred - (1 - y_true) * 1e12).view(-1)
     zero = torch.Tensor([0]).to(y_pred.device)
@@ -283,8 +289,7 @@ def get_pooling(outputs: torch.Tensor,
                 inputs: Dict,
                 pooling_strategy: str,
                 padding_strategy: str = 'right') -> torch.Tensor:
-    """
-    get pooling
+    """ Pooling the model outputs.
 
     :param outputs:  torch.Tensor. Model outputs (without pooling)
     :param inputs:  Dict. Model inputs
@@ -322,19 +327,6 @@ def get_pooling(outputs: torch.Tensor,
     return outputs
 
 
-def get_geometric_hidden_sizes(base: int = 8, max_hidden: int = 768) -> List[int]:
-    """
-    get geometric hidden size series list given a hidden size range
-
-    """
-    lst = []
-    s = base
-    while s < max_hidden:
-        lst.append(s)
-        s *= 2
-    return lst
-
-
 class Prompts:
     """
     Predefined prompts. Follow the model usage to choose the corresponding prompt.
@@ -346,8 +338,7 @@ class Prompts:
             # list all pre-defined prompts
             print(Prompts.list_prompts())
             # set prompt
-            angle.set_prompt(prompt=Prompts.A)
-
+            angle.encode(*, prompt=Prompts.A)
     """
 
     A = 'Summarize sentence "{text}" in one word:"'
@@ -590,6 +581,12 @@ class AngleDataCollator:
     filter_duplicate: bool = True
 
     def __call__(self, features: List[Dict], return_tensors: str = "pt") -> Dict[str, torch.Tensor]:
+        """ Collate function for AngleDataTokenizer.
+
+        :param features: List[Dict]. Tokenized data
+        :param return_tensors: str. Default "pt"
+        :return: Dict[str, torch.Tensor]. Collated data
+        """
         if return_tensors is None:
             return_tensors = self.return_tensors
         has_token_type_ids = "token_type_ids" in features[0]
@@ -695,33 +692,50 @@ class Pooler:
     def __init__(self,
                  model: PreTrainedModel,
                  pooling_strategy: Optional[Union[int, str]] = None,
-                 padding_strategy: Optional[str] = None,
-                 is_llm: bool = False):
+                 padding_strategy: Optional[str] = None):
         self.model = model
         self.pooling_strategy = pooling_strategy
         self.padding_strategy = padding_strategy
-        self.is_llm = is_llm
 
-    def __call__(self, inputs: Dict, layer_index: int = -1, embedding_size: Optional[int] = None,
-                 return_all_layer_outputs: bool = False) -> torch.Tensor:
-        """
+    def __call__(self,
+                 inputs: Dict,
+                 layer_index: int = -1,
+                 embedding_start: Optional[int] = None,
+                 embedding_size: Optional[int] = None,
+                 return_all_layer_outputs: bool = False,
+                 pooling_strategy: Optional[Union[int, str]] = None,) -> torch.Tensor:
+        """ Get sentence embeddings.
         :param inputs: Dict. Model inputs.
-        :param layer_index: int. Get embeddings from specific layer.
-        :param embedding_size: int. Set embedding size for sentence embeddings for 2DMSE models.
+        :param layer_index: Optional[int]. Get embeddings from specific layer.
+        :param embedding_start: Optional[int]. Start index of embeddings.
+        :param embedding_size: int. Set embedding size for sentence embeddings.
+        :param return_all_layer_outputs: bool. Return all layer outputs or not. Default False.
+        :param pooling_strategy: Optional[str].
+            Currently support [`cls`, `last`, `avg`, `cls_avg`, `max`]. Default None.
         """
         all_layer_outputs = self.model(output_hidden_states=True, return_dict=True, **inputs).hidden_states
         if return_all_layer_outputs:
             return all_layer_outputs
         outputs = all_layer_outputs[layer_index]
-        if self.is_llm:
-            batch_size = inputs['input_ids'].shape[0]
-            sequence_lengths = -1 if self.padding_strategy == 'left' else inputs["attention_mask"].sum(dim=1) - 1
-            outputs = outputs[torch.arange(batch_size, device=outputs.device), sequence_lengths]
-        else:
-            outputs = get_pooling(outputs, inputs, self.pooling_strategy, padding_strategy=self.padding_strategy)
+        outputs = get_pooling(outputs, inputs,
+                              pooling_strategy or self.pooling_strategy,
+                              padding_strategy=self.padding_strategy)
+        n_dim = len(outputs.shape)
+        if embedding_start is not None:
+            if n_dim == 2:
+                outputs = outputs[:, embedding_start:]
+            elif n_dim == 3:
+                outputs = outputs[:, :, embedding_start:]
+            else:
+                raise ValueError(f'Unsupported output shape: {outputs.shape}')
         if embedding_size is not None:
             # topk embedding size
-            return outputs[:, :embedding_size]
+            if n_dim == 2:
+                outputs = outputs[:, :embedding_size]
+            elif n_dim == 3:
+                outputs = outputs[:, :, :embedding_size]
+            else:
+                raise ValueError(f'Unsupported output shape: {outputs.shape}')
         return outputs
 
 
@@ -732,58 +746,86 @@ class AngleTrainer(Trainer):
     :param pooler: Pooler. Required
     :param loss_kwargs: Optional[Dict]. Default None.
     :param dataset_format: str. Default DatasetFormats.A
-    :param fixed_teacher_name_or_path: Optional[str]. For distribution alignment.
+    :param teacher_name_or_path: Optional[str]. For distribution alignment.
     :param **kwargs: other parameters of Trainer.
     """
     def __init__(self,
                  pooler: Pooler,
                  loss_kwargs: Optional[Dict] = None,
                  dataset_format: str = DatasetFormats.A,
-                 fixed_teacher_name_or_path: Optional[str] = None,
-                 alignment_pooling_strategy: str = 'cls',
+                 teacher_name_or_path: Optional[str] = None,
+                 teacher_pooling_strategy: str = 'cls',
                  **kwargs):
         super().__init__(**kwargs)
         self.pooler = pooler
         if loss_kwargs is None:
             loss_kwargs = {}
         self.loss_fct = AngleLoss(dataset_format=dataset_format, **loss_kwargs)
-        self.fixed_teacher_name_or_path = fixed_teacher_name_or_path
-        self.alignment_pooling_strategy = alignment_pooling_strategy
-        if fixed_teacher_name_or_path is not None:
-            assert not check_llm(fixed_teacher_name_or_path), ('Currently not support LLMs alignment,'
-                                                               f' teacher={fixed_teacher_name_or_path}')
-            assert self.pooler.pooling_strategy == 'all', ('fixed_teacher_name_or_path detected!'
-                                                           ' please set --pooling_strategy all')
-            fixed_teacher_backbone = AutoModel.from_pretrained(
-                fixed_teacher_name_or_path,
+        self.teacher_name_or_path = teacher_name_or_path
+        self.teacher_pooling_strategy = teacher_pooling_strategy
+        if teacher_name_or_path is not None:
+            logger.info('Teacher detected! '
+                        'please ensure the teacher has the same tokenizer as the backbone model!')
+            assert not check_llm(teacher_name_or_path), ('Currently not support LLMs alignment,'
+                                                         f' teacher={teacher_name_or_path}')
+            teacher_backbone = AutoModel.from_pretrained(
+                teacher_name_or_path,
                 trust_remote_code=True,
-                torch_dtype="auto")
+                torch_dtype=self.pooler.model.dtype).to(self.pooler.model.device)
 
-            fixed_teacher_backbone.config.use_cache = False
-            self.fixed_teacher_pooler = Pooler(
-                fixed_teacher_backbone,
-                pooling_strategy='all',
-                padding_strategy=self.pooler.padding_strategy,
-                is_llm=False)
-            self.kl_loss_fct = nn.KLDivLoss(reduction='batchmean')
-            logger.info(f'Train with alignment, teacher={fixed_teacher_name_or_path}')
+            self.teacher_pooler = Pooler(
+                teacher_backbone,
+                pooling_strategy=self.teacher_pooling_strategy,
+                padding_strategy=self.pooler.padding_strategy)
+            logger.info(f'Train with teacher={teacher_name_or_path}')
+
+    def distillation_loss(self,
+                          inputs: torch.Tensor,
+                          targets: torch.Tensor,
+                          mse_weight: float = 1.0,
+                          kl_temperature: float = 1.0) -> torch.Tensor:
+        """ Compute distillation loss.
+
+        :param inputs: torch.Tensor. Input tensor.
+        :param targets: torch.Tensor. Target tensor.
+        :param mse_weight: float. MSE weight. Default 1.0.
+        :param kl_temperature: float. KL temperature. Default 1.0.
+        :return: torch.Tensor. Distillation loss.
+        """
+        loss = 0.
+        if mse_weight > 0:
+            loss += mse_weight * nn.MSELoss()(inputs, targets)
+        if kl_temperature > 0:
+            loss += nn.KLDivLoss(reduction='batchmean')(
+                F.log_softmax(inputs / kl_temperature, dim=-1),
+                F.softmax(targets / kl_temperature, dim=-1)
+            ) * kl_temperature
+        return loss
 
     def compute_loss(self, model, inputs, return_outputs=False):
+        """ Compute loss for AnglE.
+
+        :param model: Huggingface model.
+        :param inputs: Dict. Model inputs.
+        :param return_outputs: bool. Return outputs or not. Default False.
+        :return: torch.Tensor. Loss.
+        """
         labels = inputs.pop("labels", None)
-        if self.fixed_teacher_name_or_path is not None:
-            all_outputs = self.pooler(inputs)
+        if self.teacher_name_or_path is not None:
+            all_outputs = self.pooler(inputs, layer_index=-1, return_all_layer_outputs=True)[-1]
             outputs = get_pooling(all_outputs, inputs,
-                                  self.alignment_pooling_strategy,
+                                  self.pooler.pooling_strategy,
                                   self.pooler.padding_strategy)
             loss = self.loss_fct(labels, outputs)
             with torch.no_grad():
-                self.fixed_teacher_pooler.model = self.fixed_teacher_pooler.model.to(self.pooler.model.device)
-                all_fixed_outputs = self.fixed_teacher_pooler(inputs)
+                self.teacher_pooler.model = self.teacher_pooler.model.to(self.pooler.model.device)
+                align_outputs = self.teacher_pooler(inputs)
 
-            alignment_loss = self.kl_loss_fct(
-                F.log_softmax(all_outputs, dim=-1),
-                F.softmax(all_fixed_outputs, dim=-1)
-            )
+            alignment_loss = self.distillation_loss(
+                all_outputs if self.teacher_pooling_strategy == 'all' else outputs,
+                align_outputs,
+                mse_weight=0.0,
+                kl_temperature=1.0)
             loss += alignment_loss
         else:
             outputs = self.pooler(inputs)
@@ -792,14 +834,14 @@ class AngleTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
 
-class AngleTDMSETrainer(AngleTrainer):
+class AngleESETrainer(AngleTrainer):
     """
-    Custom Huggingface Trainer for AnglE 2DMSE.
+    Custom Huggingface Trainer for AnglE Espresso.
 
     :param pooler: Pooler. Required
     :param loss_kwargs: Optional[Dict]. Default None.
     :param dataset_format: str. Default DatasetFormats.A
-    :param fixed_teacher_name_or_path: Optional[str]. For distribution alignment.
+    :param teacher_name_or_path: Optional[str]. For distribution alignment.
 
     :param **kwargs: other parameters of Trainer.
     """
@@ -807,84 +849,108 @@ class AngleTDMSETrainer(AngleTrainer):
                  pooler: Pooler,
                  loss_kwargs: Optional[Dict] = None,
                  dataset_format: str = DatasetFormats.A,
-                 fixed_teacher_name_or_path: Optional[str] = None,
-                 tdmse_kl_temperature: float = 1.0,
-                 tdmse_teacher_lambda: float = 1.0,
-                 tdmse_student_lambda: float = 1.0,
-                 apply_tdmse_kl: bool = True,
+                 teacher_name_or_path: Optional[str] = None,
+                 ese_kl_temperature: float = 1.0,
+                 ese_compression_size: int = 128,
+                 apply_ese_pca: bool = True,
                  **kwargs):
         super().__init__(pooler=pooler,
                          loss_kwargs=loss_kwargs,
                          dataset_format=dataset_format,
-                         fixed_teacher_name_or_path=fixed_teacher_name_or_path,
+                         teacher_name_or_path=teacher_name_or_path,
                          **kwargs)
-        self.tdmse_kl_temperature = tdmse_kl_temperature
-        self.tdmse_teacher_lambda = tdmse_teacher_lambda
-        self.tdmse_student_lambda = tdmse_student_lambda
-        self.apply_tdmse_kl = apply_tdmse_kl
+        self.ese_kl_temperature = ese_kl_temperature
+        self.ese_compression_size = ese_compression_size
+        self.apply_ese_pca = apply_ese_pca
         self.n_layers = self.pooler.model.config.num_hidden_layers
-        self.hidden_size = self.pooler.model.config.hidden_size
-        self.tdmse_hidden_sizes = get_geometric_hidden_sizes(base=8, max_hidden=self.hidden_size)
-        self.kl_loss_fct = nn.KLDivLoss(reduction='batchmean')
-        logger.info('Train with 2DMSE!')
+        logger.info('Train with ☕️ Espresso!')
+
+    @torch.no_grad()
+    def pca_compress(self, m: torch.Tensor, k: int) -> torch.Tensor:
+        """ Get topk feature via PCA.
+        :param m: torch.Tensor. Input tensor.
+        :param k: int. Top-k feature size.
+        :return: torch.Tensor. Top-k feature.
+        """
+        A = F.softmax(m.T @ m / m.shape[-1]**0.5, dim=-1)
+        u, s, _ = torch.svd_lowrank(A, q=k)
+        # top-k principal components
+        topk_deps = u @ torch.diag(s)
+        return m @ topk_deps
+
+    def compute_student_loss(self,
+                             inputs: Dict,
+                             all_layer_outputs: torch.Tensor,
+                             labels: torch.Tensor,
+                             pooling_strategy: str,
+                             padding_strategy: str) -> torch.Tensor:
+        loss = 0.
+        compression_loss = 0.
+        for i in range(self.n_layers - 1):
+            division = (1. + math.log(1 + i))
+            all_student_outputs = all_layer_outputs[i]
+            student_outputs = get_pooling(all_student_outputs,
+                                          inputs,
+                                          pooling_strategy,
+                                          padding_strategy)
+
+            slimmed_outputs = student_outputs[:, :self.ese_compression_size]
+            loss += self.loss_fct(labels, slimmed_outputs) / division
+            if self.apply_ese_pca:
+                compression_loss += self.distillation_loss(
+                    slimmed_outputs,
+                    self.pca_compress(student_outputs, self.ese_compression_size),
+                    kl_temperature=self.ese_kl_temperature
+                ) / division
+        return (loss + compression_loss) / (self.n_layers - 1)
 
     def compute_loss(self, model, inputs, return_outputs=False):
+        """ Compute loss for Espresso.
+        :param model: Huggingface model.
+        :param inputs: Dict. Model inputs.
+        :param return_outputs: bool. Return outputs or not. Default False.
+        :return: torch.Tensor. Loss.
+        """
         labels = inputs.pop("labels", None)
         # layer
-        sample_layer = random.randint(1, self.n_layers - 1)
-        pooling_strategy = (self.alignment_pooling_strategy
-                            if self.pooler.pooling_strategy == 'all'
-                            else self.pooler.pooling_strategy)
         all_layer_outputs = self.pooler(inputs, layer_index=-1, return_all_layer_outputs=True)
         all_teacher_outputs = all_layer_outputs[-1]
         teacher_outputs = get_pooling(all_teacher_outputs, inputs,
-                                      pooling_strategy,
-                                      self.pooler.padding_strategy)
-        all_student_outputs = all_layer_outputs[sample_layer]
-        student_outputs = get_pooling(all_student_outputs,
-                                      inputs,
-                                      pooling_strategy,
+                                      self.pooler.pooling_strategy,
                                       self.pooler.padding_strategy)
 
-        teacher_kl_outputs = teacher_outputs
-        if self.fixed_teacher_name_or_path is not None:
-            with torch.no_grad():
-                self.fixed_teacher_pooler.model = self.fixed_teacher_pooler.model.to(self.pooler.model.device)
-                all_fixed_outputs = self.fixed_teacher_pooler(inputs)
-                teacher_kl_outputs = get_pooling(all_fixed_outputs,
-                                                 inputs,
-                                                 self.alignment_pooling_strategy,
-                                                 self.pooler.padding_strategy)
+        loss = self.loss_fct(labels, teacher_outputs)
 
-        teacher_loss = self.loss_fct(labels, teacher_outputs)
-        loss1 = teacher_loss
-        student_loss = self.loss_fct(labels, student_outputs)
-        loss1 += student_loss / sample_layer
-        if self.apply_tdmse_kl and self.tdmse_student_lambda > 0:
-            kl_loss = self.kl_loss_fct(
-                F.log_softmax(student_outputs / self.tdmse_kl_temperature, dim=-1),
-                F.softmax(teacher_kl_outputs / self.tdmse_kl_temperature, dim=-1)
-            ) * self.tdmse_kl_temperature
-            loss1 += kl_loss
-
-        # feature
-        hidden_size = random.choice(self.tdmse_hidden_sizes)
-        slimmed_teacher_outputs = teacher_outputs[:, :hidden_size]
-        slimmed_student_outputs = student_outputs[:, :hidden_size]
-
-        slimmed_teacher_loss = self.loss_fct(labels, slimmed_teacher_outputs)
-        loss2 = slimmed_teacher_loss
-        slimmed_student_loss = self.loss_fct(labels, slimmed_student_outputs)
-        loss2 += slimmed_student_loss / sample_layer
-
-        loss = loss1 + loss2
-
-        if self.fixed_teacher_name_or_path is not None:
-            alignment_loss = self.kl_loss_fct(
-                F.log_softmax(all_teacher_outputs, dim=-1),
-                F.softmax(all_fixed_outputs, dim=-1)
+        slimmed_outputs = teacher_outputs[:, :self.ese_compression_size]
+        loss += self.loss_fct(labels, slimmed_outputs)
+        if self.apply_ese_pca:
+            loss += self.distillation_loss(
+                slimmed_outputs,
+                self.pca_compress(teacher_outputs, self.ese_compression_size),
+                kl_temperature=self.ese_kl_temperature
             )
-            loss += alignment_loss
+
+        # student loss
+        loss += self.compute_student_loss(
+            inputs,
+            all_layer_outputs,
+            labels,
+            self.pooler.pooling_strategy,
+            self.pooler.padding_strategy,
+        )
+
+        # alignment loss
+        if self.teacher_name_or_path is not None:
+            with torch.no_grad():
+                self.teacher_pooler.model = self.teacher_pooler.model.to(self.pooler.model.device)
+                align_outputs = self.teacher_pooler(inputs)
+                alignment_loss = self.distillation_loss(
+                    all_teacher_outputs if self.teacher_pooling_strategy == 'all' else teacher_outputs,
+                    align_outputs,
+                    mse_weight=0.0,
+                    kl_temperature=1.0
+                )
+                loss += alignment_loss
         return (loss, teacher_outputs) if return_outputs else loss
 
 
@@ -892,42 +958,55 @@ class AngleLoss:
     """
     Configure AngleLoss.
 
-    :param w1: float. weight for cosine_loss. Default 1.0
-    :param w2: float. weight for contrastive loss. Default 1.0
-    :param w3: float. weight for angle loss. Default 1.0
+    :param cosine_w: float. weight for cosine_loss. Default 1.0
+    :param ibn_w: float. weight for contrastive loss. Default 1.0
+    :param angle_w: float. weight for angle loss. Default 1.0
     :param cosine_tau: float. tau for cosine loss. Default 20.0
     :param ibn_tau: float. tau for contrastive loss. Default 20.0
-    :param angle_tau: float. tau for angle loss. Default 1.0
+    :param angle_tau: float. tau for angle loss. Default 20.0
+    :param angle_pooling_strategy: str. pooling strategy for angle loss. Default'sum'.
     :param dataset_format: Optional[str]. Default None.
     """
     def __init__(self,
-                 w1: float = 1.0,
-                 w2: float = 1.0,
-                 w3: float = 1.0,
+                 cosine_w: float = 1.0,
+                 ibn_w: float = 1.0,
+                 angle_w: float = 1.0,
                  cosine_tau: float = 20.0,
                  ibn_tau: float = 20.0,
-                 angle_tau: float = 1.0,
+                 angle_tau: float = 20.0,
+                 angle_pooling_strategy: str = 'sum',
                  dataset_format: Optional[str] = None,
                  **kwargs):
-        self.w1 = w1
-        self.w2 = w2
-        self.w3 = w3
+        if 'w1' in kwargs or 'w2' in kwargs or 'w3' in kwargs:
+            assert ('w1, w2, and w3 has been renamed to cosine_w, ibn_w, and angle_w, respecitvely.'
+                    'Please use new names instead.')
+        self.cosine_w = cosine_w
+        self.ibn_w = ibn_w
+        self.angle_w = angle_w
         self.cosine_tau = cosine_tau
         self.ibn_tau = ibn_tau
         self.angle_tau = angle_tau
+        self.angle_pooling_strategy = angle_pooling_strategy
         self.dataset_format = dataset_format
 
     def __call__(self,
                  labels: torch.Tensor,
                  outputs: torch.Tensor) -> torch.Tensor:
+        """ Compute loss for AnglE.
+
+        :param labels: torch.Tensor. Labels.
+        :param outputs: torch.Tensor. Outputs.
+        :return: torch.Tensor. Loss.
+        """
         if self.dataset_format == DatasetFormats.A:
             loss = 0.
-            if self.w1 > 0:
-                loss += self.w1 * cosine_loss(labels, outputs, self.cosine_tau)
-            if self.w2 > 0:
-                loss += self.w2 * in_batch_negative_loss(labels, outputs, self.ibn_tau)
-            if self.w3 > 0:
-                loss += self.w3 * angle_loss(labels, outputs, self.angle_tau)
+            if self.cosine_w > 0:
+                loss += self.cosine_w * cosine_loss(labels, outputs, self.cosine_tau)
+            if self.ibn_w > 0:
+                loss += self.ibn_w * in_batch_negative_loss(labels, outputs, self.ibn_tau)
+            if self.angle_w > 0:
+                loss += self.angle_w * angle_loss(labels, outputs, self.angle_tau,
+                                                  pooling_strategy=self.angle_pooling_strategy)
         elif self.dataset_format == DatasetFormats.B:
             # text,positive,negative
             text = outputs[::3]
@@ -944,12 +1023,13 @@ class AngleLoss:
             combined_labels = torch.cat((positive_labels, negative_labels), dim=0)
 
             loss = 0.
-            if self.w1 > 0:
-                loss += self.w1 * cosine_loss(combined_labels, combined_inputs, self.cosine_tau)
-            if self.w2 > 0:
-                loss += self.w2 * contrastive_with_negative_loss(text, positive, negative, tau=self.ibn_tau)
-            if self.w3 > 0:
-                loss += self.w3 * angle_loss(combined_labels, combined_inputs, self.angle_tau)
+            if self.cosine_w > 0:
+                loss += self.cosine_w * cosine_loss(combined_labels, combined_inputs, self.cosine_tau)
+            if self.ibn_w > 0:
+                loss += self.ibn_w * contrastive_with_negative_loss(text, positive, negative, tau=self.ibn_tau)
+            if self.angle_w > 0:
+                loss += self.angle_w * angle_loss(combined_labels, combined_inputs, self.angle_tau,
+                                                  pooling_strategy=self.angle_pooling_strategy)
         elif self.dataset_format == DatasetFormats.C:
             text = outputs[::2]
             positive = outputs[1::2]
@@ -1014,6 +1094,7 @@ class AnglE:
     :param device: Optional[str]. Specify device. Default None.
     :param kbit_kwargs: Optional[Dict]. kwargs for kbit. Default None.
         details refer to: https://huggingface.co/docs/peft/package_reference/peft_model#peft.prepare_model_for_kbit_training
+    :param tokenizer_padding_side: Optional[str]. Specify tokenizer padding side from [`left`, `right`]. Default None.
     :param **kwargs: Any.
     """  # NOQA
     cfg_file_name = 'angle.config'
@@ -1034,6 +1115,9 @@ class AnglE:
                  torch_dtype: Optional[torch.dtype] = None,
                  device: Optional[str] = None,
                  kbit_kwargs: Optional[Dict] = None,
+                 tokenizer_padding_side: Optional[str] = None,
+                 apply_billm: bool = False,
+                 billm_model_class: Optional[str] = None,
                  **kwargs: Any):
         super().__init__()
         self.max_length = max_length
@@ -1050,6 +1134,10 @@ class AnglE:
             if self.is_llm:
                 logger.info('LLM detected, automatically set is_llm=True.'
                             'If it is wrong, you can manually set `is_llm`.')
+        if self.is_llm and self.pooling_strategy != 'last':
+            logger.info(f'🚨 LLM detected, but pooling strategy is specified to {self.pooling_strategy}.'
+                        'Please check whether it is correct. It is recommended to use `last` pooling strategy for LLM.')
+
         self.apply_lora = apply_lora
         if self.apply_lora is None:
             if self.is_llm:
@@ -1062,12 +1150,6 @@ class AnglE:
             self.gpu_count = 1
         else:
             self.gpu_count = 0
-
-        self.prompt = None
-        if self.is_llm:
-            logger.info('LLM detected, automatically set prompt. '
-                        'You can change this setting by manually configuring the `set_prompt()` function.')
-            self.set_prompt()
 
         self.apply_bfloat16 = apply_bfloat16
         if self.apply_bfloat16 is None and 'llama' in model_name_or_path.lower():
@@ -1092,6 +1174,8 @@ class AnglE:
                 logger.info(f'lora_config={lora_config}')
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True)
+        if tokenizer_padding_side is not None and self.tokenizer.padding_side != tokenizer_padding_side:
+            self.tokenizer.padding_side = tokenizer_padding_side
         if self.is_llm and self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token_id = 0
 
@@ -1099,7 +1183,18 @@ class AnglE:
         kbit_kwargs = kbit_kwargs if kbit_kwargs is not None else {}
         if self.is_llm:
             device_map = "auto"
-            MODEL_CLASS = AutoModelForCausalLM
+            if apply_billm:
+                assert billm_model_class is not None, "billm_model_class should be specified for apply_billm=True"
+                try:
+                    import billm
+                except ImportError as err:
+                    print(f'Import Error: {err}')
+                    print('Please install the latest billm via: python -m pip install -U billm')
+                    raise
+
+                MODEL_CLASS = getattr(billm, billm_model_class)
+            else:
+                MODEL_CLASS = AutoModelForCausalLM
             if train_mode and self.gpu_count > 1:
                 device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
             # LLM
@@ -1137,7 +1232,8 @@ class AnglE:
                         )
                     elif train_mode:
                         if 'target_modules' not in lora_config or lora_config.get('target_modules', None) is None:
-                            target_modules = find_all_linear_names(model, linear_type=bnb.nn.Linear4bit)
+                            target_modules = find_all_linear_names(
+                                model, linear_type=bnb.nn.Linear4bit if load_kbit == 4 else nn.Linear)
                             lora_config['target_modules'] = target_modules
                             logger.info(f'lora target modules={target_modules}')
                         peft_config = LoraConfig(**lora_config)
@@ -1145,46 +1241,36 @@ class AnglE:
                     model = AnglE.kbit_post_handle(model)
                     self.backbone = model
                 else:
-                    if train_mode:
-                        model = MODEL_CLASS.from_pretrained(
-                            model_name_or_path,
+                    if self.apply_bfloat16:
+                        model = MODEL_CLASS.from_pretrained(model_name_or_path,
+                                                            output_hidden_states=True,
+                                                            trust_remote_code=True).bfloat16()
+                    else:
+                        model = MODEL_CLASS.from_pretrained(model_name_or_path,
+                                                            device_map=device_map,
+                                                            output_hidden_states=True,
+                                                            trust_remote_code=True,
+                                                            torch_dtype=torch_dtype or torch.float16)
+
+                    if 'target_modules' not in lora_config or lora_config.get('target_modules', None) is None:
+                        target_modules = find_all_linear_names(model)
+                        lora_config['target_modules'] = target_modules
+                        logger.info(f'lora target modules={target_modules}')
+
+                    if pretrained_lora_path is not None:
+                        print(f'Load lora weight from {pretrained_lora_path}')
+                        model = PeftModel.from_pretrained(
+                            model,
+                            pretrained_lora_path,
                             torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
                             device_map=device_map,
-                            trust_remote_code=True,
+                            is_trainable=train_mode
                         )
-                        if pretrained_lora_path is not None:
-                            print(f'Load lora weight from {pretrained_lora_path}')
-                            model = PeftModel.from_pretrained(
-                                model,
-                                pretrained_lora_path,
-                                torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
-                                device_map=device_map,
-                                is_trainable=train_mode
-                            )
-                        else:
+                    else:
+                        if train_mode:
                             peft_config = LoraConfig(**lora_config)
                             model = get_peft_model(model, peft_config)
-                    else:
-                        if self.apply_bfloat16:
-                            model = MODEL_CLASS.from_pretrained(model_name_or_path,
-                                                                output_hidden_states=True,
-                                                                trust_remote_code=True).bfloat16()
-                        else:
-                            model = MODEL_CLASS.from_pretrained(model_name_or_path,
-                                                                device_map=device_map,
-                                                                output_hidden_states=True,
-                                                                trust_remote_code=True,
-                                                                load_in_8bit=load_kbit == 8,
-                                                                torch_dtype=torch_dtype or torch.float16)
-                        if pretrained_lora_path is not None:
-                            logger.info(f'Load lora weight from {pretrained_lora_path}')
-                            model = PeftModel.from_pretrained(
-                                model,
-                                pretrained_lora_path,
-                                torch_dtype=torch_dtype or torch.float16,
-                                device_map=device_map,
-                                is_trainable=train_mode
-                            )
+
                     self.backbone = model
             else:
                 if self.apply_bfloat16:
@@ -1196,7 +1282,6 @@ class AnglE:
                                                         device_map=device_map,
                                                         output_hidden_states=True,
                                                         trust_remote_code=True,
-                                                        load_in_8bit=load_kbit == 8,
                                                         torch_dtype=torch_dtype or torch.float16)
                 self.backbone = model
         else:
@@ -1232,10 +1317,9 @@ class AnglE:
         self.pooler = Pooler(
             self.backbone,
             pooling_strategy=self.pooling_strategy,
-            padding_strategy=self.tokenizer.padding_side,
-            is_llm=self.is_llm)
+            padding_strategy=self.tokenizer.padding_side)
 
-        # full_backbone is used to 2DMSE inference
+        # full_backbone is used to Espresso inference
         self.full_backbone = None
         self.__cfg = {
             'model_name_or_path': model_name_or_path,
@@ -1243,7 +1327,11 @@ class AnglE:
             'model_kwargs': model_kwargs,
             'pooling_strategy': pooling_strategy,
             'lora_config_kwargs': lora_config,
-            'apply_lora': apply_lora,
+            'is_llm': self.is_llm,
+            'apply_billm': apply_billm,
+            'billm_model_class': billm_model_class,
+            'apply_lora': self.apply_lora,
+            'tokenizer_padding_side': tokenizer_padding_side,
         }
         self.__cfg.update(kwargs)
 
@@ -1355,8 +1443,11 @@ class AnglE:
             argument_kwargs: Optional[Dict] = None,
             trainer_kwargs: Optional[Dict] = None,
             loss_kwargs: Optional[Dict] = None,
-            apply_tdmse: bool = False,
-            filter_duplicate: bool = True):
+            apply_ese: bool = False,
+            filter_duplicate: bool = True,
+            push_to_hub: bool = False,
+            hub_model_id: Optional[str] = None,
+            hub_private_repo: bool = True):
         """
         Fit using AnglE.
 
@@ -1378,12 +1469,18 @@ class AnglE:
             refer to: https://huggingface.co/docs/transformers/v4.37.0/en/main_classes/trainer#transformers.TrainingArguments
         :param trainer_kwargs: Optional[Dict]. kwargs for AngleTrainer.
         :param loss_kwargs: Optional[Dict]. kwargs for AngleLoss.
-        :param apply_tdmse: bool, whether apply TDMSE training.
+        :param apply_ese: bool, whether apply ESE training.
+        :param filter_duplicate: bool, whether filter duplicate samples.
+        :param push_to_hub: bool, whether push to hub.
+        :param hub_model_id: Optional[str], hub model id.
+        :param hub_private_repo: bool, whether push to private repo.
         """  # NOQA
         if output_dir is not None:
             os.makedirs(output_dir, exist_ok=True)
         # save config
         self.save_config(os.path.join(output_dir, AnglE.cfg_file_name))
+        # save tokenizer
+        self.tokenizer.save_pretrained(output_dir)
 
         if self.gpu_count > 1:
             gradient_accumulation_steps = gradient_accumulation_steps // self.gpu_count
@@ -1391,12 +1488,27 @@ class AnglE:
             fp16 = True
         else:
             fp16 = False
+
+        # init argument_kwargs
         if argument_kwargs is None:
             argument_kwargs = {}
+        if 'push_to_hub' not in argument_kwargs:
+            argument_kwargs['push_to_hub'] = push_to_hub
+        if 'hub_model_id' not in argument_kwargs:
+            argument_kwargs['hub_model_id'] = hub_model_id
+        if 'hub_private_repo' not in argument_kwargs:
+            argument_kwargs['hub_private_repo'] = hub_private_repo
+
         if trainer_kwargs is None:
             trainer_kwargs = {}
+
         callbacks = None
         if valid_ds is not None:
+            # check format
+            for obj in valid_ds:
+                if obj['extra']['dataset_format'] != DatasetFormats.A:
+                    raise ValueError('Currently only support evaluation for DatasetFormats.A.')
+                break
             best_ckpt_dir = None
             if output_dir is not None:
                 best_ckpt_dir = os.path.join(output_dir, 'best-checkpoint')
@@ -1405,7 +1517,7 @@ class AnglE:
                                                  save_dir=best_ckpt_dir)
             callbacks = [evaluate_callback]
 
-        CustomTrainer = AngleTDMSETrainer if apply_tdmse else AngleTrainer
+        CustomTrainer = AngleESETrainer if apply_ese else AngleTrainer
         trainer = CustomTrainer(
             pooler=self.pooler,
             model=self.backbone,
@@ -1442,6 +1554,8 @@ class AnglE:
             self.backbone = torch.compile(self.backbone)
 
         trainer.train()
+        if argument_kwargs.get('push_to_hub', False):
+            trainer.push_to_hub()
         self.backbone.save_pretrained(output_dir)
 
     def evaluate(self, data: Dataset, batch_size: int = 32, threshold: Optional[float] = None, device: Any = None):
@@ -1460,7 +1574,8 @@ class AnglE:
             y_trues.extend(y[::2, 0].detach().cpu().numpy())
             with torch.no_grad():
                 X.to(device or self.device)
-                x_vecs = self.pooler(X).detach().float().cpu().numpy()
+                x_vecs = self.pooler(X,
+                                     pooling_strategy=self.pooling_strategy).detach().float().cpu().numpy()
             x_vecs = l2_normalize(x_vecs)
             pred = (x_vecs[::2] * x_vecs[1::2]).sum(1)
             y_preds.extend(pred)
@@ -1473,29 +1588,28 @@ class AnglE:
             accuracy = np.mean((y_trues > 0.5) == (y_preds > threshold))
         return corrcoef, accuracy
 
-    def set_prompt(self, prompt: str = Prompts.A):
-        self.prompt = prompt
-        if self.prompt is not None:
-            logger.info('Prompt is set, the prompt will be automatically applied during the encoding phase. '
-                        'To disable prompt setting, please configure set_prompt(prompt=None)')
-
     def encode(self,
                inputs: Union[List[str], Tuple[str], List[Dict], str],
                max_length: Optional[int] = None,
                end_with_eos: bool = False,
                to_numpy: bool = True,
                layer_index: int = -1,
+               embedding_start: int = 0,
                embedding_size: Optional[int] = None,
-               device: Optional[Any] = None):
+               device: Optional[Any] = None,
+               prompt: Optional[str] = None):
         """
         encode texts.
 
         :param inputs: Union[List[str], Tuple[str], List[Dict], str]. Input texts. Required.
         :param max_length: Optional[int]. Default None.
         :param to_numpy: bool. Default True.
-        :param layer_index: int. Obtain specific layer's sentence embeddings (for 2DMSE).
-        :param embedding_size: Optional[int]. Specify embedding size (for 2DMSE).
+        :param layer_index: int. Obtain specific layer's sentence embeddings (for Espresso).
+        :param embedding_start: int. Specify the start position of the embedding (for Espresso).
+        :param embedding_size: Optional[int]. Specify embedding size (for Espresso).
+            The embeddings from embedding_start to embedding_start+embedding_size will be returned.
         :param device: Optional[Any]. Default None.
+        :param prompt: Optional[str]. Default None.
         """
         if layer_index != -1 and self.full_backbone is None:
             self.full_backbone = copy.deepcopy(self.backbone)
@@ -1508,10 +1622,10 @@ class AnglE:
         self.backbone.eval()
         if not isinstance(inputs, (tuple, list)):
             inputs = [inputs]
-        if self.prompt is not None:
+        if prompt is not None:
             for i, obj in enumerate(inputs):
                 assert isinstance(obj, dict), 'The prompt has been set, please pass a dict like {"prompt_key": "text"}'
-                inputs[i] = self.prompt.format(**obj)
+                inputs[i] = prompt.format(**obj)
         max_length = max_length or self.max_length
         if end_with_eos:
             max_length -= 1
@@ -1534,10 +1648,20 @@ class AnglE:
                 return_tensors='pt')
         tok.to(device)
         with torch.no_grad():
-            output = self.pooler(tok, layer_index=layer_index, embedding_size=embedding_size)
+            output = self.pooler(tok,
+                                 layer_index=layer_index,
+                                 embedding_start=embedding_start,
+                                 embedding_size=embedding_size)
         if to_numpy:
             return output.float().detach().cpu().numpy()
         return output
 
-    def export_onnx(self):
-        pass
+    def push_to_hub(self, hub_model_id: str, private: bool = True, **kwargs):
+        """ push model to hub
+
+        :param hub_model_id: str, hub model id.
+        :param private: bool, whether push to private repo. Default True.
+        :param kwargs: other kwargs for `push_to_hub` method.
+        """
+        self.tokenizer.push_to_hub(hub_model_id, private=private, **kwargs)
+        self.backbone.push_to_hub(hub_model_id, private=private, **kwargs)

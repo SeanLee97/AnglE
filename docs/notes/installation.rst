@@ -1,4 +1,4 @@
-Installation
+⬇️ Installation
 ================================
 
 
@@ -8,7 +8,7 @@ You can install or upgrade AnglE from pip:
 
 .. code-block:: bash
 
-    python -m pip install -U angle_emb
+    python -m pip install -U angle-emb
 
 
 
