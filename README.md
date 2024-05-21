@@ -94,6 +94,8 @@ python -m pip install -U angle-emb
 ```
 
 ### ⌛ Infer BERT-based Model
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1QJcA2Mvive4pBxWweTpZz9OgwvE42eJZ?usp=sharing)
+
 
 1) **With Prompts**: You can specify a prompt with `prompt=YOUR_PROMPT` in `encode` method. If set a prompt, the inputs should be a list of dict or a single dict with key `text`, where `text` is the placeholder in the prompt for the input text. You can use other placeholder names. We provide a set of predefined prompts in `Prompts` class, you can check them via `Prompts.list_prompts()`.
 
@@ -138,6 +140,7 @@ for i, dv1 in enumerate(doc_vecs):
 
 
 ### ⌛ Infer LLM-based Models
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1QJcA2Mvive4pBxWweTpZz9OgwvE42eJZ?usp=sharing)
 
 If the pretrained weight is a LoRA-based model, you need to specify the backbone via `model_name_or_path` and specify the LoRA path via the `pretrained_lora_path` in `from_pretrained` method. 
 
@@ -165,6 +168,7 @@ for i, dv1 in enumerate(doc_vecs):
 
 
 ### ⌛ Infer BiLLM-based Models
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1QJcA2Mvive4pBxWweTpZz9OgwvE42eJZ?usp=sharing)
 
 Specify `apply_billm` and `billm_model_class` to load and infer billm models
 
@@ -193,6 +197,7 @@ for i, dv1 in enumerate(doc_vecs):
         print(cosine_similarity(dv1, dv2))
 ```
 ### ⌛ Infer Espresso/Matryoshka Models
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1QJcA2Mvive4pBxWweTpZz9OgwvE42eJZ?usp=sharing)
 
 Specify `layer_index` and `embedding_size` to truncate embeddings.
 
