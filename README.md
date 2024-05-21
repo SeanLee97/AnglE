@@ -16,8 +16,7 @@
     <img src="https://img.shields.io/pypi/dm/angle_emb?style=flat-square" alt="PyPI Downloads" />
 </a>
 <a href="https://angle.readthedocs.io/en/latest/index.html">
-    <img src="https://readthedocs.org/projects/angle/badge/?version=latest&style=flat-square
-    " alt="Read the docs" />
+    <img src="https://readthedocs.org/projects/angle/badge/?version=latest&style=flat-square" alt="Read the docs" />
 </a>
 
 
