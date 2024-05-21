@@ -1,7 +1,7 @@
 🚀 Quick Start
 ================================
 
-A few steps steps to get started with AnglE:
+A few steps to get started with AnglE:
 
 
 ⬇️ Installation
