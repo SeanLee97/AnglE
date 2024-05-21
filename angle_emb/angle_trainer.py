@@ -14,7 +14,7 @@ from angle_emb.utils import logger
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_name_or_path', type=str, required=True,
-                    help='Specify model_name_or_path to set transformer backbone, default roberta-large')
+                    help='Specify model name or path to set transformer backbone, required')
 parser.add_argument('--pretrained_model_path', type=str, default=None,
                     help='Specify pretrained model path to load pretrained model, default None')
 parser.add_argument('--pretrained_lora_path', type=str, default=None,
@@ -22,21 +22,24 @@ parser.add_argument('--pretrained_lora_path', type=str, default=None,
 parser.add_argument('--train_name_or_path', type=str, required=True,
                     help='Specify huggingface datasets name or local file path for train set, required')
 parser.add_argument('--train_subset_name', type=str, default=None,
-                    help='Specify huggingface datasets subset name for train set')
+                    help='Specify huggingface datasets subset name for train set, default None')
 parser.add_argument('--train_split_name', type=str, default='train',
-                    help='Specify huggingface datasets split name for train set, Default `train`')
+                    help='Specify huggingface datasets split name for train set, default `train`')
 parser.add_argument('--valid_name_or_path', type=str, default=None,
-                    help='Specify huggingface datasets name or local file path for valid set.')
+                    help='Specify huggingface datasets name or local file path for valid set, default None.')
 parser.add_argument('--valid_subset_name', type=str, default=None,
-                    help='Specify huggingface datasets subset name for valid set')
+                    help='Specify huggingface datasets subset name for valid set, default None')
 parser.add_argument('--valid_split_name', type=str, default='train',
-                    help='Specify huggingface datasets split name for valid set')
+                    help='Specify huggingface datasets split name for valid set, default `train`')
 parser.add_argument('--prompt_template', type=str, default=None,
-                    help='Specify prompt_template like "Instruct: xxx\nInput: {text}", default None')
+                    help='Specify prompt_template like "xxx: {text}", default None.'
+                         'This prompt will be applied for all text columns.'
+                         'If you want to specify different prompts for different text columns,'
+                         'please handle it in the preprocessing step.')
 parser.add_argument('--save_dir', type=str, default=None,
                     help='Specify save dir, default None')
-parser.add_argument('--seed', type=int, default=42,
-                    help='Specify random seed, default 42')
+parser.add_argument('--seed', type=int, default=-1,
+                    help='Specify random seed, default -1')
 parser.add_argument('--dataset_seed', type=int, default=None,
                     help='Specify dataset random seed, default None')
 parser.add_argument('--workers', type=int, default=2,
@@ -54,7 +57,7 @@ parser.add_argument('--cosine_tau', type=float, default=20.0,
 parser.add_argument('--ibn_tau', type=float, default=20.0,
                     help='Specify ibn_tau, defaut 20.0')
 parser.add_argument('--apply_lora', type=int, default=0, choices=[0, 1],
-                    help='Specify apply_lora, choices [0, 1], defaut 0')
+                    help='Specify lora flag, choices [0, 1], default 0')
 parser.add_argument('--load_kbit', type=int, default=None, choices=[4, 8, 16],
                     help='Specify kbit training, choices [4, 8, 16], default None')
 parser.add_argument('--lora_r', type=int, default=32,
@@ -64,7 +67,7 @@ parser.add_argument('--lora_alpha', type=int, default=32,
 parser.add_argument('--lora_dropout', type=float, default=0.1,
                     help='Specify lora_dropout, defaut 0.1')
 parser.add_argument('--lora_target_modules', type=str, default=None,
-                    help='Specify lora_target_modules. comma serves as the splitter, such as W,b. Defaut None')
+                    help='Specify lora_target_modules. comma serves as the splitter, such as `W,b`. Defaut None')
 parser.add_argument('--learning_rate', type=float, default=1e-5,
                     help='Specify learning_rate, defaut 1e-5')
 parser.add_argument('--warmup_steps', type=int, default=100,
@@ -75,14 +78,14 @@ parser.add_argument('--pooling_strategy', type=str, default='cls',
                     help='Specify pooling_strategy from [`cls`, `last`, `avg`, `cls_avg`, `max`], default `cls`')
 parser.add_argument('--tokenizer_padding_side', type=str, default=None, choices=['left', 'right'],
                     help='specify tokenizer padding side from [`left`, `right`], default None')
-parser.add_argument('--epochs', type=int, default=20, help='Specify epochs, default 20')
+parser.add_argument('--epochs', type=int, default=10, help='Specify epochs, default 10')
 parser.add_argument('--max_steps', type=int, default=-1,
                     help='Specify max steps, default -1 (Automatically calculated from epochs)')
 parser.add_argument('--save_steps', type=int, default=100, help='Specify save_steps, default 1000')
 parser.add_argument('--batch_size', type=int, default=32, help='Specify batch size, default 32')
 parser.add_argument('--maxlen', type=int, default=512, help='Specify max length, default 512')
 parser.add_argument('--streaming', action='store_true', default=False,
-                    help='Flag to enable streaming mode (default: False)')
+                    help='Flag to enable streaming mode, default False')
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                     help='Specify gradient_accumulation_steps, default 1')
 parser.add_argument('--torch_dtype', type=str, default=None, choices=['auto', 'float32', 'float16', 'bfloat16'],
@@ -206,7 +209,7 @@ def main():
                 valid_ds = load_dataset(args.valid_name_or_path, num_proc=args.workers)
         valid_ds = valid_ds[args.valid_split_name or 'train'].map(
             AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template),
-                               num_proc=args.workers)
+            num_proc=args.workers)
 
     argument_kwargs = {}
     if args.push_to_hub:

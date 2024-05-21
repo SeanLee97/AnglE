@@ -700,23 +700,42 @@ class Pooler:
     def __call__(self,
                  inputs: Dict,
                  layer_index: int = -1,
-                 embedding_start: int = 0,
+                 embedding_start: Optional[int] = None,
                  embedding_size: Optional[int] = None,
-                 return_all_layer_outputs: bool = False) -> torch.Tensor:
+                 return_all_layer_outputs: bool = False,
+                 pooling_strategy: Optional[Union[int, str]] = None,) -> torch.Tensor:
         """ Get sentence embeddings.
         :param inputs: Dict. Model inputs.
-        :param layer_index: int. Get embeddings from specific layer.
-        :param embedding_size: int. Set embedding size for sentence embeddings for Espresso models.
+        :param layer_index: Optional[int]. Get embeddings from specific layer.
+        :param embedding_start: Optional[int]. Start index of embeddings.
+        :param embedding_size: int. Set embedding size for sentence embeddings.
+        :param return_all_layer_outputs: bool. Return all layer outputs or not. Default False.
+        :param pooling_strategy: Optional[str].
+            Currently support [`cls`, `last`, `avg`, `cls_avg`, `max`]. Default None.
         """
         all_layer_outputs = self.model(output_hidden_states=True, return_dict=True, **inputs).hidden_states
         if return_all_layer_outputs:
             return all_layer_outputs
         outputs = all_layer_outputs[layer_index]
-        outputs = get_pooling(outputs, inputs, self.pooling_strategy, padding_strategy=self.padding_strategy)
-        outputs = outputs[:, embedding_start:]
+        outputs = get_pooling(outputs, inputs,
+                              pooling_strategy or self.pooling_strategy,
+                              padding_strategy=self.padding_strategy)
+        n_dim = len(outputs.shape)
+        if embedding_start is not None:
+            if n_dim == 2:
+                outputs = outputs[:, embedding_start:]
+            elif n_dim == 3:
+                outputs = outputs[:, :, embedding_start:]
+            else:
+                raise ValueError(f'Unsupported output shape: {outputs.shape}')
         if embedding_size is not None:
             # topk embedding size
-            return outputs[:, :embedding_size]
+            if n_dim == 2:
+                outputs = outputs[:, :embedding_size]
+            elif n_dim == 3:
+                outputs = outputs[:, :, :embedding_size]
+            else:
+                raise ValueError(f'Unsupported output shape: {outputs.shape}')
         return outputs
 
 
@@ -745,37 +764,37 @@ class AngleTrainer(Trainer):
         self.teacher_name_or_path = teacher_name_or_path
         self.teacher_pooling_strategy = teacher_pooling_strategy
         if teacher_name_or_path is not None:
-            logger.info('fixed teacher detected! '
-                        'please ensure the fixed teacher has the same tokenizer as the backbone model!')
+            logger.info('Teacher detected! '
+                        'please ensure the teacher has the same tokenizer as the backbone model!')
             assert not check_llm(teacher_name_or_path), ('Currently not support LLMs alignment,'
                                                          f' teacher={teacher_name_or_path}')
-            assert self.pooler.pooling_strategy == 'all', ('teacher_name_or_path detected!'
-                                                           ' please set --pooling_strategy all')
-            fixed_teacher_backbone = AutoModel.from_pretrained(
+            teacher_backbone = AutoModel.from_pretrained(
                 teacher_name_or_path,
                 trust_remote_code=True,
-                torch_dtype="auto")
+                torch_dtype=self.pooler.model.dtype).to(self.pooler.model.device)
 
-            fixed_teacher_backbone.config.use_cache = False
-            self.fixed_teacher_pooler = Pooler(
-                fixed_teacher_backbone,
-                pooling_strategy='all',
+            self.teacher_pooler = Pooler(
+                teacher_backbone,
+                pooling_strategy=self.teacher_pooling_strategy,
                 padding_strategy=self.pooler.padding_strategy)
-            logger.info(f'Train with alignment, teacher={teacher_name_or_path}')
+            logger.info(f'Train with teacher={teacher_name_or_path}')
 
     def distillation_loss(self,
                           inputs: torch.Tensor,
                           targets: torch.Tensor,
+                          mse_weight: float = 1.0,
                           kl_temperature: float = 1.0) -> torch.Tensor:
         """ Compute distillation loss.
 
         :param inputs: torch.Tensor. Input tensor.
         :param targets: torch.Tensor. Target tensor.
+        :param mse_weight: float. MSE weight. Default 1.0.
         :param kl_temperature: float. KL temperature. Default 1.0.
         :return: torch.Tensor. Distillation loss.
         """
         loss = 0.
-        loss += nn.MSELoss()(inputs, targets)
+        if mse_weight > 0:
+            loss += mse_weight * nn.MSELoss()(inputs, targets)
         if kl_temperature > 0:
             loss += nn.KLDivLoss(reduction='batchmean')(
                 F.log_softmax(inputs / kl_temperature, dim=-1),
@@ -793,16 +812,20 @@ class AngleTrainer(Trainer):
         """
         labels = inputs.pop("labels", None)
         if self.teacher_name_or_path is not None:
-            all_outputs = self.pooler(inputs)
+            all_outputs = self.pooler(inputs, layer_index=-1, return_all_layer_outputs=True)[-1]
             outputs = get_pooling(all_outputs, inputs,
-                                  self.teacher_pooling_strategy,
+                                  self.pooler.pooling_strategy,
                                   self.pooler.padding_strategy)
             loss = self.loss_fct(labels, outputs)
             with torch.no_grad():
-                self.fixed_teacher_pooler.model = self.fixed_teacher_pooler.model.to(self.pooler.model.device)
-                all_fixed_outputs = self.fixed_teacher_pooler(inputs)
+                self.teacher_pooler.model = self.teacher_pooler.model.to(self.pooler.model.device)
+                align_outputs = self.teacher_pooler(inputs)
 
-            alignment_loss = self.distillation_loss(all_outputs, all_fixed_outputs)
+            alignment_loss = self.distillation_loss(
+                all_outputs if self.teacher_pooling_strategy == 'all' else outputs,
+                align_outputs,
+                mse_weight=0.0,
+                kl_temperature=1.0)
             loss += alignment_loss
         else:
             outputs = self.pooler(inputs)
@@ -840,32 +863,20 @@ class AngleESETrainer(AngleTrainer):
         self.ese_compression_size = ese_compression_size
         self.apply_ese_pca = apply_ese_pca
         self.n_layers = self.pooler.model.config.num_hidden_layers
-        logger.info('Train with Espresso v5!')
+        logger.info('Train with ☕️ Espresso!')
 
     @torch.no_grad()
     def pca_compress(self, m: torch.Tensor, k: int) -> torch.Tensor:
-        """ Get topk feature via quasi-SVD.
+        """ Get topk feature via PCA.
         :param m: torch.Tensor. Input tensor.
         :param k: int. Top-k feature size.
         :return: torch.Tensor. Top-k feature.
         """
         A = F.softmax(m.T @ m / m.shape[-1]**0.5, dim=-1)
         u, s, _ = torch.svd_lowrank(A, q=k)
-        # a = u @ torch.diag(F.softmax(s, dim=-1)) @ (v.T)[:, :k]
         # top-k principal components
         topk_deps = u @ torch.diag(s)
         return m @ topk_deps
-
-    @torch.no_grad()
-    def pca_compress_old(self, m: torch.Tensor, k: int) -> torch.Tensor:
-        """ Get topk feature via quasi-SVD.
-        :param m: torch.Tensor. Input tensor.
-        :param k: int. Top-k feature size.
-        :return: torch.Tensor. Top-k feature.
-        """
-        u, s, _ = torch.svd_lowrank(m, q=k)
-        # top-k principal components
-        return u @ torch.diag(s)
 
     def compute_student_loss(self,
                              inputs: Dict,
@@ -902,13 +913,10 @@ class AngleESETrainer(AngleTrainer):
         """
         labels = inputs.pop("labels", None)
         # layer
-        pooling_strategy = (self.teacher_pooling_strategy
-                            if self.pooler.pooling_strategy == 'all'
-                            else self.pooler.pooling_strategy)
         all_layer_outputs = self.pooler(inputs, layer_index=-1, return_all_layer_outputs=True)
         all_teacher_outputs = all_layer_outputs[-1]
         teacher_outputs = get_pooling(all_teacher_outputs, inputs,
-                                      pooling_strategy,
+                                      self.pooler.pooling_strategy,
                                       self.pooler.padding_strategy)
 
         loss = self.loss_fct(labels, teacher_outputs)
@@ -927,17 +935,20 @@ class AngleESETrainer(AngleTrainer):
             inputs,
             all_layer_outputs,
             labels,
-            pooling_strategy,
+            self.pooler.pooling_strategy,
             self.pooler.padding_strategy,
         )
 
         # alignment loss
         if self.teacher_name_or_path is not None:
             with torch.no_grad():
-                self.fixed_teacher_pooler.model = self.fixed_teacher_pooler.model.to(self.pooler.model.device)
-                all_fixed_outputs = self.fixed_teacher_pooler(inputs)
+                self.teacher_pooler.model = self.teacher_pooler.model.to(self.pooler.model.device)
+                align_outputs = self.teacher_pooler(inputs)
                 alignment_loss = self.distillation_loss(
-                    all_teacher_outputs, all_fixed_outputs,
+                    all_teacher_outputs if self.teacher_pooling_strategy == 'all' else teacher_outputs,
+                    align_outputs,
+                    mse_weight=0.0,
+                    kl_temperature=1.0
                 )
                 loss += alignment_loss
         return (loss, teacher_outputs) if return_outputs else loss
@@ -1245,6 +1256,7 @@ class AnglE:
                         target_modules = find_all_linear_names(model)
                         lora_config['target_modules'] = target_modules
                         logger.info(f'lora target modules={target_modules}')
+
                     if pretrained_lora_path is not None:
                         print(f'Load lora weight from {pretrained_lora_path}')
                         model = PeftModel.from_pretrained(
@@ -1562,7 +1574,8 @@ class AnglE:
             y_trues.extend(y[::2, 0].detach().cpu().numpy())
             with torch.no_grad():
                 X.to(device or self.device)
-                x_vecs = self.pooler(X).detach().float().cpu().numpy()
+                x_vecs = self.pooler(X,
+                                     pooling_strategy=self.pooling_strategy).detach().float().cpu().numpy()
             x_vecs = l2_normalize(x_vecs)
             pred = (x_vecs[::2] * x_vecs[1::2]).sum(1)
             y_preds.extend(pred)
