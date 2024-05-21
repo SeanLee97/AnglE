@@ -78,7 +78,7 @@ If the pretrained weight is a LoRA-based model, you need to specify the backbone
                                 pretrained_lora_path='SeanLee97/angle-llama-7b-nli-v2',
                                 pooling_strategy='last',
                                 is_llm=True,
-                                torch_dtype='float16')
+                                torch_dtype='float16').cuda()
 
     print('All predefined prompts:', Prompts.list_prompts())
     vec = angle.encode({'text': 'hello world'}, to_numpy=True, prompt=Prompts.A)
@@ -104,7 +104,7 @@ Specify `apply_billm` and `billm_model_class` to load and infer billm models
                                 is_llm=True,
                                 apply_billm=True,
                                 billm_model_class='LlamaForCausalMask',
-                                torch_dtype='float16')
+                                torch_dtype='float16').cuda()
 
     doc_vecs = angle.encode([
         'The weather is great!',
