@@ -26,9 +26,8 @@ This library is from the paper: [AnglE: Angle-optimized Text Embeddings](https:/
 - Multi-GPU training
 
 
-> More features will be added in the future. <a href="http://makeapullrequest.com">
-    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="http://makeapullrequest.com" />
-</a>
+> <a href="http://makeapullrequest.com"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="http://makeapullrequest.com" /></a> 
+    More features will be added in the future. 
 
 ## 🏆 Achievements
 
