@@ -73,3 +73,13 @@ AnglE is also a general sentence embedding inference framework, allowing for inf
    :maxdepth: 2
    :caption: Contents:
 
+   notes/quickstart.rst
+   notes/installation.rst
+   notes/pretrained_models.rst
+   notes/training.rst
+   notes/citation.rst
+
+
+.. toctree::
+   :maxdepth: 1
+   :caption: APIs:
