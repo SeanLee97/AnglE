@@ -2,7 +2,7 @@
 
 > Paper: https://arxiv.org/abs/2402.14776
 
-"🪆 2D Matryoshka Sentence Embeddings" has been renamed to "☕️ Espresso Sentence Embeddings". 
+"🪆 2D Matryoshka Sentence Embeddings" has been renamed to ☕️ "ESE: Espresso Sentence Embeddings". 
 
 Please find the document in [☕️ Espresso](README_Espresso.md)
 
@@ -11,7 +11,7 @@ Please find the document in [☕️ Espresso](README_Espresso.md)
 
 ```bibtex
 @article{li20242d,
-  title={2D Matryoshka Sentence Embeddings},
+  title={ESE: Espresso Sentence Embeddings},
   author={Xianming Li and Zongxi Li and Jing Li and Haoran Xie and Qing Li},
   journal={arXiv preprint arXiv:2402.14776},
   year={2024}
