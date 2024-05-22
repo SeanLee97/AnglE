@@ -19,7 +19,7 @@ If you train with Espresso technique, please also cite the following paper:
 
     @article{li2024ese,
         title={ESE: Espresso Sentence Embeddings},
-        author={Xianming Li and Zongxi Li and Jing Li and Haoran Xie and Qing Li},
+        author={Li, Xianming and Li, Zongxi and Li, Jing and Xie, Haoran and Li, Qing},
         journal={arXiv preprint arXiv:2402.14776},
         year={2024}
     }
