@@ -52,7 +52,7 @@ You can train a powerful sentence embedding model using the `angle-trainer` cli 
         BiLLM_START_INDEX=0 WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=2345 -m angle_emb.angle_trainer \
         --train_name_or_path SeanLee97/all_nli_angle_format_b \
         --save_dir ckpts/billm-uae-large-nli \
-        --model_name WhereIsAI/UAE-Large-V1 \
+        --model_name_or_path WhereIsAI/UAE-Large-V1 \
         --pooling_strategy cls \
         --maxlen 75 \
         --ibn_w 20.0 \
@@ -78,7 +78,7 @@ You can train a powerful sentence embedding model using the `angle-trainer` cli 
         BiLLM_START_INDEX=0 WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=2345 -m angle_emb.angle_trainer \
         --train_name_or_path SeanLee97/all_nli_angle_format_b \
         --save_dir ckpts/billm-llama7b-nli \
-        --model_name NousResearch/Llama-2-7b-chat-hf \
+        --model_name_or_path NousResearch/Llama-2-7b-chat-hf \
         --pooling_strategy avg \
         --maxlen 60 \
         --ibn_w 20.0 \
