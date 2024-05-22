@@ -10,11 +10,11 @@ Please find the document in [☕️ Espresso](README_Espresso.md)
 # Citation
 
 ```bibtex
-@article{li20242d,
-  title={ESE: Espresso Sentence Embeddings},
-  author={Xianming Li and Zongxi Li and Jing Li and Haoran Xie and Qing Li},
-  journal={arXiv preprint arXiv:2402.14776},
-  year={2024}
+@article{li2024ese,
+    title={ESE: Espresso Sentence Embeddings},
+    author={Li, Xianming and Li, Zongxi and Li, Jing and Xie, Haoran and Li, Qing},
+    journal={arXiv preprint arXiv:2402.14776},
+    year={2024}
 }
 
 @article{li2023angle,

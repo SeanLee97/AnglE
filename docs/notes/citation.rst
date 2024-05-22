@@ -17,7 +17,7 @@ If you train with Espresso technique, please also cite the following paper:
 
 .. code-block:: bibtex
 
-    @article{li20242d,
+    @article{li2024ese,
         title={ESE: Espresso Sentence Embeddings},
         author={Xianming Li and Zongxi Li and Jing Li and Haoran Xie and Qing Li},
         journal={arXiv preprint arXiv:2402.14776},
