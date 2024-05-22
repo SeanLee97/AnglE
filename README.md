@@ -183,7 +183,7 @@ angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf',
                               pooling_strategy='last',
                               is_llm=True,
                               apply_billm=True,
-                              billm_model_class='LlamaForCausalMask',
+                              billm_model_class='LlamaForCausalLM',
                               torch_dtype='float16').cuda()
 
 doc_vecs = angle.encode([
