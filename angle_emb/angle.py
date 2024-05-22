@@ -1077,6 +1077,7 @@ class AnglE:
     AnglE. Everything is here👋
 
     :param model_name_or_path: str, model name or path.
+    :param tokenizer_name_or_path: Optional[str]. Default None. When it set to None, it will use the same as `model_name_or_path`.
     :param max_length: int. Default 512
     :param model_kwargs: Optional[Dict]. kwargs for model.
     :param lora_config_kwargs: Optional[Dict]. kwargs for peft lora_config.
@@ -1101,6 +1102,7 @@ class AnglE:
 
     def __init__(self,
                  model_name_or_path: str,
+                 tokenizer_name_or_path: Optional[str] = None,
                  max_length: int = 512,
                  model_kwargs: Optional[Dict] = None,
                  lora_config_kwargs: Optional[Dict] = None,
@@ -1173,7 +1175,8 @@ class AnglE:
             if train_mode:
                 logger.info(f'lora_config={lora_config}')
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name_or_path or model_name_or_path, trust_remote_code=True)
         if tokenizer_padding_side is not None and self.tokenizer.padding_side != tokenizer_padding_side:
             self.tokenizer.padding_side = tokenizer_padding_side
         if self.is_llm and self.tokenizer.pad_token_id is None:

@@ -15,6 +15,8 @@ from angle_emb.utils import logger
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_name_or_path', type=str, required=True,
                     help='Specify model name or path to set transformer backbone, required')
+parser.add_argument('--tokenizer_name_or_path', type=str, default=None,
+                    help='Specify tokenizer name or path. Default None, will use model_name_or_path')
 parser.add_argument('--pretrained_model_path', type=str, default=None,
                     help='Specify pretrained model path to load pretrained model, default None')
 parser.add_argument('--pretrained_lora_path', type=str, default=None,
@@ -159,6 +161,7 @@ if args.lora_target_modules is not None:
 
 def main():
     model = AnglE(args.model_name_or_path,
+                  tokenizer_name_or_path=args.tokenizer_name_or_path,
                   max_length=args.maxlen,
                   pretrained_model_path=args.pretrained_model_path,
                   pretrained_lora_path=args.pretrained_lora_path,
