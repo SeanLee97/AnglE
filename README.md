@@ -75,7 +75,7 @@ BERT-based models:
 |  🤗 HF | Max Tokens | Pooling Strategy | Scenario |
 |----|------|------|------|
 | [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) | 512 | cls | English, General-purpose |
-| [WhereIsAI/UAE-Code-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) |  512 | cls | Code Similarity |
+| [WhereIsAI/UAE-Code-Large-V1](https://huggingface.co/WhereIsAI/UAE-Code-Large-V1) |  512 | cls | Code Similarity |
 
 LLM-based models:
 
