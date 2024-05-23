@@ -1146,6 +1146,9 @@ class AnglE:
                 self.apply_lora = True
                 logger.info('LLM detected, automatically set apply_lora=True.'
                             'If it is wrong, you can manually set `apply_lora`.')
+            if pretrained_lora_path is not None:
+                self.apply_lora = True
+
         if self.device == 'cuda':
             self.gpu_count = torch.cuda.device_count()
         elif self.device == 'mps':
