@@ -1313,8 +1313,7 @@ class AnglE:
                     logger.info(f'Load pretrained model from {pretrained_model_path}')
                 self.backbone = AutoModel.from_pretrained(
                     pretrained_model_path or model_name_or_path,
-                    trust_remote_code=True,
-                    torch_dtype=torch_dtype or "auto")
+                    trust_remote_code=True)
 
         if train_mode and self.apply_lora:
             self.backbone.print_trainable_parameters()
