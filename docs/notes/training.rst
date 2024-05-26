@@ -18,7 +18,7 @@ We currently support three dataset formats:
 
 3. `DatasetFormats.C`: it is a pair format with two columns: `text`, `positive`. `positive` is the positive sample of `text`. e.g.  `{"text": "Two blond women are hugging one another.", "positive": "There are women showing affection."}`
 
-It is required toprepare your data into huggingface `datasets.Dataset` in one of the above formats.
+It is required to prepare your data into huggingface `datasets.Dataset` in one of the above formats.
 
 
 ⭐ angle-trainer [recommended]
