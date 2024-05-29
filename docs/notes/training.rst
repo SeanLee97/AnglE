@@ -49,7 +49,7 @@ You can train a powerful sentence embedding model using the `angle-trainer` cli 
 
     .. code-block:: bash
 
-        BiLLM_START_INDEX=0 WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=2345 -m angle_emb.angle_trainer \
+        WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=2345 -m angle_emb.angle_trainer \
         --train_name_or_path SeanLee97/all_nli_angle_format_b \
         --save_dir ckpts/billm-uae-large-nli \
         --model_name_or_path WhereIsAI/UAE-Large-V1 \
