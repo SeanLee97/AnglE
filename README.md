@@ -184,12 +184,12 @@ from angle_emb.utils import cosine_similarity
 
 # specify `apply_billm` and `billm_model_class` to load billm models
 angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf',
-                            pretrained_lora_path='SeanLee97/bellm-llama-7b-nli',
-                            pooling_strategy='last',
-                            is_llm=True,
-                            apply_billm=True,
-                            billm_model_class='LlamaForCausalLM',
-                            torch_dtype=torch.float16).cuda()
+                              pretrained_lora_path='SeanLee97/bellm-llama-7b-nli',
+                              pooling_strategy='last',
+                              is_llm=True,
+                              apply_billm=True,
+                              billm_model_class='LlamaForCausalLM',
+                              torch_dtype=torch.float16).cuda()
 
 doc_vecs = angle.encode([
     {'text': 'The weather is great!'},
