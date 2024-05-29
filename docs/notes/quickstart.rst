@@ -72,19 +72,26 @@ If the pretrained weight is a LoRA-based model, you need to specify the backbone
 
 .. code-block:: python
 
+    import torch
     from angle_emb import AnglE, Prompts
+    from angle_emb.utils import cosine_similarity
 
     angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf',
                                 pretrained_lora_path='SeanLee97/angle-llama-7b-nli-v2',
                                 pooling_strategy='last',
                                 is_llm=True,
-                                torch_dtype='float16').cuda()
-
+                                torch_dtype=torch.float16).cuda()
     print('All predefined prompts:', Prompts.list_prompts())
-    vec = angle.encode({'text': 'hello world'}, to_numpy=True, prompt=Prompts.A)
-    print(vec)
-    vecs = angle.encode([{'text': 'hello world1'}, {'text': 'hello world2'}], to_numpy=True, prompt=Prompts.A)
-    print(vecs)
+    doc_vecs = angle.encode([
+        {'text': 'The weather is great!'},
+        {'text': 'The weather is very good!'},
+        {'text': 'i am going to bed'}
+    ], prompt=Prompts.A)
+
+    for i, dv1 in enumerate(doc_vecs):
+        for dv2 in doc_vecs[i+1:]:
+            print(cosine_similarity(dv1, dv2))
+
 
 
 ⌛ Infer BiLLM-based Models
@@ -94,6 +101,11 @@ Specify `apply_billm` and `billm_model_class` to load and infer billm models
 
 .. code-block:: python
 
+    import os
+    # set an environment variable for billm start index
+    os.environ['BiLLM_START_INDEX'] = '31'
+
+    import torch
     from angle_emb import AnglE, Prompts
     from angle_emb.utils import cosine_similarity
 
@@ -104,12 +116,12 @@ Specify `apply_billm` and `billm_model_class` to load and infer billm models
                                 is_llm=True,
                                 apply_billm=True,
                                 billm_model_class='LlamaForCausalLM',
-                                torch_dtype='float16').cuda()
+                                torch_dtype=torch.float16).cuda()
 
     doc_vecs = angle.encode([
-        'The weather is great!',
-        'The weather is very good!',
-        'i am going to bed'
+        {'text': 'The weather is great!'},
+        {'text': 'The weather is very good!'},
+        {'text': 'i am going to bed'}
     ], prompt='The representative word for sentence {text} is:"')
 
     for i, dv1 in enumerate(doc_vecs):
