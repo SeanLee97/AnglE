@@ -705,6 +705,7 @@ class Pooler:
                  return_all_layer_outputs: bool = False,
                  pooling_strategy: Optional[Union[int, str]] = None,) -> torch.Tensor:
         """ Get sentence embeddings.
+
         :param inputs: Dict. Model inputs.
         :param layer_index: Optional[int]. Get embeddings from specific layer.
         :param embedding_start: Optional[int]. Start index of embeddings.
