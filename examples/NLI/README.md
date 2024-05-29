@@ -71,9 +71,9 @@ CUDA_VISIBLE_DEVICES=1,2,3,4 torchrun --nproc_per_node=4 --master_port=1234 angl
 ## 5. Evaluate STS Performance using SentEval
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python eval_nli.py \
---prompt 'Summarize sentence "{text}" in one word:"' \
+CUDA_VISIBLE_DEVICES=0,1 python eval_nli.py \
 --model_name_or_path NousResearch/Llama-2-7b-hf \
---lora_weight ckpts/NLI-STS-angle-llama-7b \
---apply_bfloat16
+--lora_name_or_path SeanLee97/angle-llama-7b-nli \
+--pooling_strategy last \
+--is_llm 1
 ```

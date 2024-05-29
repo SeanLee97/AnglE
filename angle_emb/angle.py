@@ -1090,7 +1090,6 @@ class AnglE:
     :param is_llm: Optional[bool]. Whether the model is llm. Default None.
     :param pretrained_model_path: Optional[str]. Default None.
     :param pretrained_lora_path: Optional[str]. Default None.
-    :param apply_bfloat16: Optional[bool]. Whether load using torch.bfloat16. Default None.
     :param torch_dtype: Optional[torch.dtype]. Specify torch_dtype. Default None.
     :param device: Optional[str]. Specify device. Default None.
     :param kbit_kwargs: Optional[Dict]. kwargs for kbit. Default None.
@@ -1113,7 +1112,6 @@ class AnglE:
                  is_llm: Optional[bool] = None,
                  pretrained_model_path: Optional[str] = None,
                  pretrained_lora_path: Optional[str] = None,
-                 apply_bfloat16: Optional[bool] = None,
                  torch_dtype: Optional[torch.dtype] = None,
                  device: Optional[str] = None,
                  kbit_kwargs: Optional[Dict] = None,
@@ -1155,12 +1153,6 @@ class AnglE:
             self.gpu_count = 1
         else:
             self.gpu_count = 0
-
-        self.apply_bfloat16 = apply_bfloat16
-        if self.apply_bfloat16 is None and 'llama' in model_name_or_path.lower():
-            logger.info('LLaMA detected, automatically set `apply_bfloat16=True`. '
-                        'You can change this setting by manually configuring the `apply_bfloat16`.')
-            self.apply_bfloat16 = True
 
         if torch_dtype is None:
             torch_dtype = torch.float32 if train_mode else None
@@ -1208,7 +1200,8 @@ class AnglE:
                 lora_config['bias'] = "none"
                 lora_config['task_type'] = TaskType.CAUSAL_LM
 
-                if load_kbit in [4, 8]:
+                is_kbit = load_kbit in [4, 8]
+                if is_kbit:
                     model = MODEL_CLASS.from_pretrained(
                         model_name_or_path,
                         config=None,
@@ -1225,70 +1218,43 @@ class AnglE:
                         device_map=device_map,
                         trust_remote_code=True,
                     )
-                    if train_mode:
-                        model = prepare_model_for_kbit_training(model, **kbit_kwargs)
-                    if pretrained_lora_path is not None:
-                        print(f'Load lora weight from {pretrained_lora_path}')
-                        model = PeftModel.from_pretrained(
-                            model,
-                            pretrained_lora_path,
-                            torch_dtype=torch.float32,
-                            device_map=device_map,
-                            is_trainable=train_mode
-                        )
-                    elif train_mode:
-                        if 'target_modules' not in lora_config or lora_config.get('target_modules', None) is None:
-                            target_modules = find_all_linear_names(
-                                model, linear_type=bnb.nn.Linear4bit if load_kbit == 4 else nn.Linear)
-                            lora_config['target_modules'] = target_modules
-                            logger.info(f'lora target modules={target_modules}')
-                        peft_config = LoraConfig(**lora_config)
-                        model = get_peft_model(model, peft_config)
-                    model = AnglE.kbit_post_handle(model)
-                    self.backbone = model
-                else:
-                    if self.apply_bfloat16:
-                        model = MODEL_CLASS.from_pretrained(model_name_or_path,
-                                                            output_hidden_states=True,
-                                                            trust_remote_code=True).bfloat16()
-                    else:
-                        model = MODEL_CLASS.from_pretrained(model_name_or_path,
-                                                            device_map=device_map,
-                                                            output_hidden_states=True,
-                                                            trust_remote_code=True,
-                                                            torch_dtype=torch_dtype or torch.float16)
-
-                    if 'target_modules' not in lora_config or lora_config.get('target_modules', None) is None:
-                        target_modules = find_all_linear_names(model)
-                        lora_config['target_modules'] = target_modules
-                        logger.info(f'lora target modules={target_modules}')
-
-                    if pretrained_lora_path is not None:
-                        print(f'Load lora weight from {pretrained_lora_path}')
-                        model = PeftModel.from_pretrained(
-                            model,
-                            pretrained_lora_path,
-                            torch_dtype=torch.float16 if load_kbit == 16 else torch.float32,
-                            device_map=device_map,
-                            is_trainable=train_mode
-                        )
-                    else:
-                        if train_mode:
-                            peft_config = LoraConfig(**lora_config)
-                            model = get_peft_model(model, peft_config)
-
-                    self.backbone = model
-            else:
-                if self.apply_bfloat16:
-                    model = MODEL_CLASS.from_pretrained(model_name_or_path,
-                                                        output_hidden_states=True,
-                                                        trust_remote_code=True).bfloat16()
                 else:
                     model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                         device_map=device_map,
                                                         output_hidden_states=True,
                                                         trust_remote_code=True,
                                                         torch_dtype=torch_dtype or torch.float16)
+                if train_mode and is_kbit:
+                    model = prepare_model_for_kbit_training(model, **kbit_kwargs)
+
+                if pretrained_lora_path is not None:
+                    logger.info(f'Load lora weight from {pretrained_lora_path}')
+                    model = PeftModel.from_pretrained(
+                        model,
+                        pretrained_lora_path,
+                        torch_dtype=torch.float32 if is_kbit else (torch_dtype or torch.float16),
+                        device_map=device_map,
+                        is_trainable=train_mode
+                    )
+                elif train_mode:
+                    if 'target_modules' not in lora_config or lora_config.get('target_modules', None) is None:
+                        target_modules = find_all_linear_names(
+                            model, linear_type=bnb.nn.Linear4bit if load_kbit == 4 else nn.Linear)
+                        lora_config['target_modules'] = target_modules
+                        logger.info(f'lora target modules={target_modules}')
+                    peft_config = LoraConfig(**lora_config)
+                    model = get_peft_model(model, peft_config)
+
+                if is_kbit:
+                    model = AnglE.kbit_post_handle(model)
+
+                self.backbone = model
+            else:
+                model = MODEL_CLASS.from_pretrained(model_name_or_path,
+                                                    device_map=device_map,
+                                                    output_hidden_states=True,
+                                                    trust_remote_code=True,
+                                                    torch_dtype=torch_dtype or torch.float16)
                 self.backbone = model
         else:
             # non-LLMs
@@ -1341,8 +1307,9 @@ class AnglE:
         self.__cfg.update(kwargs)
 
     def cuda(self):
-        if self.load_kbit is None:
-            self.backbone = self.backbone.to(torch.device(self.device))
+        if self.gpu_count > 1 and self.is_llm:
+            return self
+        self.backbone = self.backbone.to(torch.device(self.device))
         return self
 
     def to(self, device: Any):

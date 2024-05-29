@@ -1,21 +1,19 @@
 # -*- coding: utf-8 -*-
 
-# modified from: https://github.com/kongds/Prompt-BERT/blob/main/evaluation.py
-
 import sys
 import os
 import logging
-
-# Set up logger
-logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
-
-import torch
 import fcntl
 import time
 import argparse
+logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
+
+import torch
 from prettytable import PrettyTable
 from transformers import AutoTokenizer
 from angle_emb import AnglE
+
+
 
 # Import SentEval
 sys.path.insert(0, './SentEval')
@@ -54,12 +52,11 @@ def lock_and_write_file(file_path, content):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--prompt', type=str, default='Summarize sentence "{text}" in one word:"')
-    parser.add_argument("--tokenizer_name", type=str, default='')
-    parser.add_argument("--pooling_strategy", type=str, default='cls_avg')
-    parser.add_argument("--apply_bfloat16", type=int, choices=[0, 1], default=None)
     parser.add_argument("--model_name_or_path", type=str,
-                        help="Transformers' model name or path")
+                        help="Transformers' model name or path", required=True)
+    parser.add_argument('--prompt', type=str, default='Summarize sentence "{text}" in one word:"')
+    parser.add_argument("--pooling_strategy", type=str, required=True)
+    parser.add_argument("--is_llm", type=int, choices=[0, 1], default=0)
     parser.add_argument("--max_length", type=int, default=512,
                         help="max length")
     parser.add_argument("--mode", type=str,
@@ -70,29 +67,28 @@ def main():
                         choices=['sts', 'transfer', 'full', 'na'],
                         default='sts',
                         help="What set of tasks to evaluate on. If not 'na', this will override '--tasks'")
-    parser.add_argument('--load_kbit', type=int,
-                        choices=[4,8,16],
-                        default=8,
-                        help="Load model in kbit")
-
-    parser.add_argument('--avg', action='store_true')
-    parser.add_argument('--lora_weight', type=str, default=None)
+    parser.add_argument('--lora_name_or_path', type=str, default=None)
     parser.add_argument('--pretrained_model_path', type=str, default=None)
-    parser.add_argument('--checkpoint_path', type=str, default=None)
 
 
     args = parser.parse_args()
 
-    is_llm = 'llama' in args.model_name_or_path.lower()
-    if is_llm:
-        model = AnglE.from_pretrained(args.model_name_or_path, pretrained_lora_path=args.lora_weight, load_kbit=args.load_kbit, apply_bfloat16=args.apply_bfloat16)
+    if args.is_llm:
+        model = AnglE.from_pretrained(
+            args.model_name_or_path,
+            pretrained_lora_path=args.lora_name_or_path,
+            pooling_strategy=args.pooling_strategy,
+            torch_dtype=torch.bfloat16,
+            is_llm=True).cuda()
     else:
         args.prompt = None
-        model = AnglE.from_pretrained(args.model_name_or_path, pretrained_model_path=args.pretrained_model_path, pooling_strategy=args.pooling_strategy).cuda()
+        model = AnglE.from_pretrained(
+            args.model_name_or_path,
+            pretrained_model_path=args.pretrained_model_path,
+            pooling_strategy=args.pooling_strategy).cuda()
     print('>>> prompt:', args.prompt)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Set up the tasks
     if args.task_set == 'sts':
@@ -138,7 +134,7 @@ def main():
                 if len(s) > 0 and s[-1] not in '.?"\'': s += '.'
                 s = s.replace('"', '\'')
                 if len(s) > 0 and '?' == s[-1]: s = s[:-1] + '.'
-                sentences[i] = {'text': s}
+                sentences[i] = args.prompt.format(text=s)
 
         return model.encode(sentences, to_numpy=True, max_length=args.max_length)
 
@@ -161,31 +157,6 @@ def main():
             else:
                 scores.append("0.00")
         print_table(task_names, scores)
-
-        if args.checkpoint_path is not None:
-            # evaluate checkpoints on dev
-            if os.path.exists(os.path.join(args.checkpoint_path, 'dev_results')):
-                max_scores = 0
-                with open(os.path.join(args.checkpoint_path, 'dev_results'), 'r') as f:
-                    for i in f:
-                        max_scores = max(max_scores, float(i.split()[1]))
-            else:
-                max_scores = 0
-
-            # save best checkpoint
-            if float(scores[-1]) >= max_scores:
-                import shutil
-                if args.lora_weight is not None:
-                    shutil.copytree(args.lora_weight, os.path.join(args.checkpoint_path, 'best_model'), dirs_exist_ok=True)
-                else:
-                    shutil.copytree(args.model_name_or_path, os.path.join(args.checkpoint_path, 'best_model'), dirs_exist_ok=True)
-
-            # log dev results
-            with open(os.path.join(args.checkpoint_path, 'dev_results'), 'a') as f:
-                prefix = args.mask_embedding_sentence_template if not args.avg else 'avg'
-                line = prefix + ' ' +str(scores[-1]) + ' ' + \
-                    args.lora_weight if args.lora_weight is not None else args.model_name_or_path
-                f.write( line + '\n')
 
         task_names = []
         scores = []
@@ -221,8 +192,7 @@ def main():
         # write results and template to file
         if args.prompt is not None and args.task_set != 'transfer':
             with open('./sts-org-results', 'a') as f:
-                bits = f'{args.load_kbit}bit'
-                model_name = args.model_name_or_path.split('/')[-1] + f'({bits})'
+                model_name = args.model_name_or_path.split('/')[-1]
                 f.write(args.prompt.replace(' ', '_') + ' ' + model_name + ' ' + ' '.join([str(s) for s in scores]) + '\n')
 
         task_names = []
