@@ -1,6 +1,6 @@
-# 🪆 2D Matryoshka Sentence Embeddings
+# 🪆 [2D Matryoshka Sentence Embeddings](https://arxiv.org/abs/2402.14776v1)
 
-> Paper: https://arxiv.org/abs/2402.14776
+> Paper: https://arxiv.org/abs/2402.14776v1
 
 "🪆 2D Matryoshka Sentence Embeddings" has been renamed to ☕️ "ESE: Espresso Sentence Embeddings". 
 
