@@ -109,7 +109,7 @@ def main():
                                          'tenacity': 3, 'epoch_size': 2}
     elif args.mode == 'test':
         # Full mode
-        params = {'task_path': PATH_TO_DATA, 'usepytorch': True, 'kfold': 10, 'batch_size':16}
+        params = {'task_path': PATH_TO_DATA, 'usepytorch': True, 'kfold': 10, 'batch_size': 2}
         params['classifier'] = {'nhid': 0, 'optim': 'adam', 'batch_size': 64,
                                          'tenacity': 5, 'epoch_size': 4}
     else:
