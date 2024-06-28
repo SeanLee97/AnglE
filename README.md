@@ -4,7 +4,7 @@
 
 > It is Angle 📐, not Angel 👼.
 
-📘 document: https://angle.readthedocs.io/en/latest/index.html
+**For more detailed usage, please read the 📘 document:** https://angle.readthedocs.io/en/latest/index.html
 
 <a href="https://arxiv.org/abs/2309.12871">
     <img src="https://img.shields.io/badge/Arxiv-2309.12871-yellow.svg?style=flat-square" alt="https://arxiv.org/abs/2309.12871" />
