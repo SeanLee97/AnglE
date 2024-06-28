@@ -49,24 +49,25 @@ You can train a powerful sentence embedding model using the `angle-trainer` cli 
 
     .. code-block:: bash
 
-        WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=2345 -m angle_emb.angle_trainer \
-        --train_name_or_path SeanLee97/all_nli_angle_format_b \
-        --save_dir ckpts/billm-uae-large-nli \
-        --model_name_or_path WhereIsAI/UAE-Large-V1 \
+        WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 torchrun --nproc_per_node=8 --master_port=1234 -m angle_emb.angle_trainer \
+        --train_name_or_path SeanLee97/all_nli_angle_format_a \
+        --save_dir ckpts/bert-base-nli-test \
+        --model_name_or_path google-bert/bert-base-uncased \
         --pooling_strategy cls \
-        --maxlen 75 \
-        --ibn_w 20.0 \
+        --maxlen 128 \
+        --ibn_w 30.0 \
         --cosine_w 0.0 \
         --angle_w 1.0 \
-        --learning_rate 1e-6 \
-        --push_to_hub 1 --hub_model_id SeanLee97/test-uae-large-nli --hub_private_repo 1 \
-        --logging_steps 5 \
-        --save_steps 50 \
+        --angle_tau 20.0 \
+        --learning_rate 5e-5 \
+        --push_to_hub 1 --hub_model_id SeanLee97/bert-base-nli-test-0728 --hub_private_repo 1 \
+        --logging_steps 10 \
+        --save_steps 100 \
         --warmup_steps 50 \
-        --batch_size 64 \
+        --batch_size 128 \
         --seed 42 \
-        --gradient_accumulation_steps 4 \
-        --epochs 1 \
+        --gradient_accumulation_steps 16 \
+        --epochs 10 \
         --fp16 1
 
 

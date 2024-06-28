@@ -40,27 +40,57 @@ $ bash download_dataset.sh
 
 ## 4. Train script
 
-1) use `train_angle.py`
+### 4.1 BERT
+
+train:
+
+Here is an training example for BERT-based NLI model:
 
 ```bash
-CUDA_VISIBLE_DEVICES=1,2,3,4 torchrun --nproc_per_node=4 --master_port=1234 train_angle.py \
---task NLI-STS --save_dir ckpts/NLI-STS-angle-llama-7b \
---model_name NousResearch/Llama-2-7b-hf \
---w2 35 --learning_rate 1e-4 --maxlen 50 \
---lora_r 32 --lora_alpha 32 --lora_dropout 0.1 \
---save_steps 500 --batch_size 120 --seed 42 --do_eval 0 --load_kbit 4 --gradient_accumulation_steps 4 --epochs 1
+WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 torchrun --nproc_per_node=8 --master_port=1234 -m angle_emb.angle_trainer \
+--train_name_or_path SeanLee97/all_nli_angle_format_a \
+--save_dir ckpts/bert-base-nli-test \
+--model_name_or_path google-bert/bert-base-uncased \
+--pooling_strategy cls \
+--maxlen 128 \
+--ibn_w 30.0 \
+--cosine_w 0.0 \
+--angle_w 1.0 \
+--angle_tau 20.0 \
+--learning_rate 5e-5 \
+--push_to_hub 1 --hub_model_id SeanLee97/bert-base-nli-test-0728 --hub_private_repo 1 \
+--logging_steps 10 \
+--save_steps 100 \
+--warmup_steps 50 \
+--batch_size 128 \
+--seed 42 \
+--gradient_accumulation_steps 16 \
+--epochs 10 \
+--fp16 1
 ```
 
-2) use `angle-trainer`
-
-You need to transform the  AllNLI dataset into jsonl format like {"text1": "", "text2": "", "label": 0/1}.
-For the label, we set `entailment` to `1`, `contradiction` to `0`, and skip `neutral`.
-Supposed the filename is `train.jsonl`, then you can train as follows:
+eval:
 
 ```bash
-CUDA_VISIBLE_DEVICES=1,2,3,4 torchrun --nproc_per_node=4 --master_port=1234 angle-trainer \
+CUDA_VISIBLE_DEVICES=0 python eval_nli.py \
+--model_name_or_path SeanLee97/bert-base-nli-test-0728 \
+--pooling_strategy cls_avg
+```
+
+
+**Tuning Tips**:
+
+- prepare data into `DatasetFormats.A`
+- try to increase epochs
+- set gradient_accumulation_steps = n * n_gpus
+
+
+### 4.2 LLM-based
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=1234 -m angle_emb.angle_trainer \
 --model_name_or_path NousResearch/Llama-2-7b-hf \
---train_name_or_path train.jsonl \
+--train_name_or_path SeanLee97/all_nli_angle_format_b \
 --save_dir ckpts/NLI-STS-angle-llama-7b \
 --prompt_template 'Summarize sentence "{text}" in one word:"' \
 --w2 35 --learning_rate 1e-4 --maxlen 50 \
