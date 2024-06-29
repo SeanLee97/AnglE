@@ -1493,6 +1493,7 @@ class AnglE:
             best_ckpt_dir = None
             if output_dir is not None:
                 best_ckpt_dir = os.path.join(output_dir, 'best-checkpoint')
+                self.tokenizer.save_pretrained(best_ckpt_dir)
             evaluate_callback = EvaluateCallback(self.backbone, valid_ds,
                                                  partial(self.evaluate, batch_size=batch_size, device=self.device),
                                                  save_dir=best_ckpt_dir)
