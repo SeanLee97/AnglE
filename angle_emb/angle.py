@@ -1675,7 +1675,7 @@ class AnglE(AngleBase):
         """
         if not exist_ok and os.path.exists(output_dir):
             raise ValueError(f"Output directory ({output_dir}) already exists and is not empty.")
-        os.makedirs(output_dir)
+        os.makedirs(output_dir, exist_ok=exist_ok)
         self.tokenizer.save_pretrained(output_dir)
         self.backbone.save_pretrained(output_dir)
 
