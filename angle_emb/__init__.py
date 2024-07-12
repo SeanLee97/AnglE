@@ -2,6 +2,4 @@
 
 from .angle import *  # NOQA
 from .evaluation import *  # NOQA
-
-
-__version__ = '0.4.12'
+from .version import __version__  # NOQA

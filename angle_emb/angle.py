@@ -31,6 +31,7 @@ from peft.tuners.lora import LoraLayer
 from .base import AngleBase
 from .utils import logger
 from .evaluation import CorrelationEvaluator
+from .version import __version__
 
 
 DEFAULT_LLM_PATTERNS = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*', r'.*mistral.*']
@@ -1114,7 +1115,7 @@ class AnglE(AngleBase):
     :param load_mlm_model: bool. Whether load mlm model. Default False. If set True, it will load model with AutoModelForMaskedLM.
     :param **kwargs: Any.
     """  # NOQA
-    cfg_file_name = 'angle.config'
+    cfg_file_name = 'angle_config.json'
     special_columns = ['labels', 'seperate_ids', 'extra', 'mask_target_labels']
 
     def __init__(self,
@@ -1322,6 +1323,7 @@ class AnglE(AngleBase):
             'billm_model_class': billm_model_class,
             'apply_lora': self.apply_lora,
             'tokenizer_padding_side': tokenizer_padding_side,
+            'angle_emb_version': __version__,
         }
         self.__cfg.update(kwargs)
 
