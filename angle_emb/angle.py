@@ -35,6 +35,7 @@ from peft import (
 from peft.tuners.lora import LoraLayer
 
 from .utils import logger
+from .version import __version__
 
 
 DEFAULT_LLM_PATTERNS = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*', r'.*mistral.*']
@@ -1378,6 +1379,7 @@ class AnglE:
             'billm_model_class': billm_model_class,
             'apply_lora': self.apply_lora,
             'tokenizer_padding_side': tokenizer_padding_side,
+            'angle_emb_version': __version__,
         }
         self.__cfg.update(kwargs)
 
