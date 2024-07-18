@@ -1550,7 +1550,8 @@ class AnglE:
                embedding_start: int = 0,
                embedding_size: Optional[int] = None,
                device: Optional[Any] = None,
-               prompt: Optional[str] = None):
+               prompt: Optional[str] = None,
+               normalize_embedding: bool = False):
         """
         encode texts.
 
@@ -1563,6 +1564,7 @@ class AnglE:
             The embeddings from embedding_start to embedding_start+embedding_size will be returned.
         :param device: Optional[Any]. Default None.
         :param prompt: Optional[str]. Default None.
+        :param normalize_embedding: bool. Default False.
         """
         if layer_index != -1 and self.full_backbone is None:
             self.full_backbone = copy.deepcopy(self.backbone)
@@ -1605,6 +1607,8 @@ class AnglE:
                                  layer_index=layer_index,
                                  embedding_start=embedding_start,
                                  embedding_size=embedding_size)
+        if normalize_embedding:
+            output = nn.functional.normalize(output, p=2, dim=-1)
         if to_numpy:
             return output.float().detach().cpu().numpy()
         return output

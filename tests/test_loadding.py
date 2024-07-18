@@ -25,3 +25,12 @@ def test_2dmse_loadding():
     assert isinstance(vecs, np.ndarray)
     vecs = angle.encode(['hello world', 'hi there👋'], layer_index=20, embedding_size=512)
     assert isinstance(vecs, np.ndarray)
+
+
+def test_normalize_embedding():
+    import numpy as np
+    from angle_emb import AnglE
+
+    angle = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1')
+    vecs = angle.encode('hello world', normalize_embedding=True)
+    assert isinstance(vecs, np.ndarray)
