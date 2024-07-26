@@ -12,8 +12,6 @@ from sklearn.metrics.pairwise import (
 )
 from scipy.stats import pearsonr, spearmanr
 
-from .angle import AnglE
-
 
 class CorrelationEvaluator(object):
     def __init__(
@@ -29,7 +27,7 @@ class CorrelationEvaluator(object):
         self.labels = labels
         self.batch_size = batch_size
 
-    def __call__(self, model: AnglE, **kwargs) -> dict:
+    def __call__(self, model, **kwargs) -> dict:
         """ Evaluate the model on the given dataset.
 
         :param model: AnglE, the model to evaluate.
