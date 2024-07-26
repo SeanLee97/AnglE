@@ -298,7 +298,6 @@ ds = ds.select_columns(["text1", "text2", "label"])
 # 3. transform data
 train_ds = ds['train'].shuffle().map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
 valid_ds = ds['validation'].map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
-test_ds = ds['test'].map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
 
 # 4. fit
 angle.fit(
@@ -325,8 +324,8 @@ angle.fit(
 )
 
 # 5. evaluate
-corrcoef, accuracy = angle.evaluate(test_ds, device=angle.device)
-print('corrcoef:', corrcoef)
+corrcoef = angle.evaluate(ds['test'])
+print('Spearman\'s corrcoef:', corrcoef)
 ```
 
 ### 💡 Others
