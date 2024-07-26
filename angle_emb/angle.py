@@ -1408,7 +1408,7 @@ class AnglE(AngleBase):
             if output_dir is not None:
                 best_ckpt_dir = os.path.join(output_dir, 'best-checkpoint')
             evaluate_callback = EvaluateCallback(self, valid_ds,
-                                                 partial(self.evaluate, batch_size=batch_size, device=self.device),
+                                                 partial(self.evaluate, batch_size=batch_size),
                                                  save_dir=best_ckpt_dir,
                                                  push_to_hub=push_to_hub,
                                                  hub_model_id=hub_model_id,
