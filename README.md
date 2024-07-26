@@ -85,6 +85,9 @@ LLM-based models:
 | [SeanLee97/angle-llama-7b-nli-v2](https://huggingface.co/SeanLee97/angle-llama-7b-nli-v2) | NousResearch/Llama-2-7b-hf | 4096 | `Prompts.A` | last token | English, Similarity Measurement | 
 
 
+**💡 You can find more third-party embeddings trained with AnglE in [HuggingFace Collection](https://huggingface.co/collections/SeanLee97/angle-based-embeddings-669a181354729d168a6ead9b)**
+
+
 ## 🚀 Quick Start
 
 ### ⬇️ Installation
