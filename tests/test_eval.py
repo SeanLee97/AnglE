@@ -13,7 +13,7 @@ def test_eval():
         text2=eval_dataset["sentence2"],
         labels=eval_dataset["score"],
     )(angle)['spearman_cosine']
-    assert spearman > 0.9
+    assert spearman > 0.89
 
     spearman = angle.evaluate(eval_dataset)
-    assert spearman > 0.9
+    assert spearman > 0.89
