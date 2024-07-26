@@ -10,15 +10,10 @@ from functools import partial
 from typing import Any, Dict, Optional, List, Union, Tuple, Callable
 from dataclasses import dataclass
 
-import scipy
-import scipy.stats
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import bitsandbytes as bnb
-from tqdm import tqdm
-from boltons.iterutils import chunked_iter
 from datasets import Dataset
 from transformers import (
     AutoModelForCausalLM, AutoModel, AutoTokenizer,
@@ -35,6 +30,7 @@ from peft import (
 from peft.tuners.lora import LoraLayer
 
 from .utils import logger
+from .evaluation import CorrelationEvaluator
 
 
 DEFAULT_LLM_PATTERNS = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*', r'.*mistral.*']
@@ -235,44 +231,6 @@ def contrastive_with_negative_loss(
         range(len(scores)), dtype=torch.long, device=scores.device
     )
     return nn.CrossEntropyLoss()(scores, labels)
-
-
-def compute_corrcoef(x: np.ndarray, y: np.ndarray) -> float:
-    """
-    Compute correlation coefficients
-
-    :param x: np.ndarry, x array
-    :param y: np.ndarry, y array
-
-    :return: float
-    """
-    return scipy.stats.spearmanr(x, y).correlation
-
-
-def l2_normalize(arr: np.ndarray) -> np.ndarray:
-    """
-    Normalize array using L2
-
-    :param arr: np.ndarray, input array
-
-    :return: np.ndarray
-    """
-    norms = (arr**2).sum(axis=1, keepdims=True)**0.5
-    return arr / np.clip(norms, 1e-8, np.inf)
-
-
-def optimal_threshold(y_true: np.ndarray, y_pred: np.ndarray) -> Tuple[float, float]:
-    """
-    Compute optimal threshold
-
-    :param y_true: np.ndarray, y_true
-    :param y_pred: np.ndarray, y_true
-
-    :return: Tuple[float, float]
-    """
-    loss = lambda t: -np.mean((y_true > 0.5) == (y_pred > np.tanh(t)))  # NOQA
-    result = scipy.optimize.minimize(loss, 1, method='Powell')
-    return np.tanh(result.x), -result.fun
 
 
 def check_llm(model_name_or_path: str, llm_regex_patterns: List[str] = None) -> bool:
@@ -1499,35 +1457,21 @@ class AnglE:
             trainer.push_to_hub()
         self.backbone.save_pretrained(output_dir)
 
-    def evaluate(self, data: Dataset, batch_size: int = 32, threshold: Optional[float] = None, device: Any = None):
-        self.backbone.eval()
-        data_collator = AngleDataCollator(
-            self.tokenizer,
-            return_tensors="pt",
-            max_length=self.max_length,
-            filter_duplicate=False,
-        )
-        y_trues, y_preds = [], []
-        # for X, y in data.make_iter(random=False):
-        for features in tqdm(chunked_iter(data, batch_size), desc='Evaluate'):
-            X = data_collator(features)
-            y = X.pop('labels', None)
-            y_trues.extend(y[::2, 0].detach().cpu().numpy())
-            with torch.no_grad():
-                X.to(device or self.device)
-                x_vecs = self.pooler(X,
-                                     pooling_strategy=self.pooling_strategy).detach().float().cpu().numpy()
-            x_vecs = l2_normalize(x_vecs)
-            pred = (x_vecs[::2] * x_vecs[1::2]).sum(1)
-            y_preds.extend(pred)
+    def evaluate(self, data: Dataset, batch_size: int = 32, metric: str = 'spearman_cosine') -> float:
+        """ evaluate
 
-        y_trues, y_preds = np.array(y_trues), np.array(y_preds)
-        corrcoef = compute_corrcoef(y_trues, y_preds)
-        if threshold is None:
-            _, accuracy = optimal_threshold(y_trues, y_preds)
-        else:
-            accuracy = np.mean((y_trues > 0.5) == (y_preds > threshold))
-        return corrcoef, accuracy
+        :param data: Dataset, DatasetFormats.A is required
+        :param batch_size: int. Default 32.
+        :param metric: str. Default 'spearman_cosine'.
+
+        :return: float.
+        """
+        return CorrelationEvaluator(
+            text1=data['text1'],
+            text2=data['text2'],
+            labels=data['label'],
+            batch_size=batch_size,
+        )(self)[metric]
 
     def encode(self,
                inputs: Union[List[str], Tuple[str], List[Dict], str],
@@ -1656,7 +1600,7 @@ class EvaluateCallback(TrainerCallback):
         self.hub_private_repo = hub_private_repo
 
     def on_epoch_end(self, args, state, control, **kwargs):
-        corrcoef, accuracy = self.evaluate_fn(self.valid_ds)
+        corrcoef = self.evaluate_fn(self.valid_ds)
         if corrcoef > self.best_corrcoef:
             self.best_corrcoef = corrcoef
             print('new best corrcoef!')
@@ -1669,4 +1613,4 @@ class EvaluateCallback(TrainerCallback):
                         private=self.hub_private_repo,
                         exist_ok=True,
                         commit_message='new best checkpoint')
-        print(f'corrcoef: {corrcoef}, accuracy: {accuracy}, best corrcoef: {self.best_corrcoef}')
+        logger.info(f'corrcoef: {corrcoef}, best corrcoef: {self.best_corrcoef}')
