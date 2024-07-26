@@ -160,7 +160,7 @@ You can also train a sentence embedding model using the `angle_emb` library. Her
     :alt: Open In Colab
 
 
-💡 4. Fine-tuning Tips
+💡 Fine-tuning Tips
 -------------------------
 
 1. If your dataset format is `DatasetFormats.A`, it is recommended to slightly increase the weight for `cosine_w` or slightly decrease the weight for `ibn_w`.
