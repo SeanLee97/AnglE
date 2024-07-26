@@ -15,5 +15,6 @@ def test_eval():
     )(angle)['spearman_cosine']
     assert spearman > 0.89
 
-    spearman = angle.evaluate(eval_dataset.rename({'sentence1': 'text1', 'sentence2': 'text2', 'score': 'label'}))
+    spearman = angle.evaluate(
+        eval_dataset.rename_columns({'sentence1': 'text1', 'sentence2': 'text2', 'score': 'label'}))
     assert spearman > 0.89
