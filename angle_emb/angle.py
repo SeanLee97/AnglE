@@ -29,6 +29,7 @@ from peft import (
 )
 from peft.tuners.lora import LoraLayer
 
+from .base import AngleBase
 from .utils import logger
 from .evaluation import CorrelationEvaluator
 
@@ -994,7 +995,7 @@ class AngleLoss:
         return loss
 
 
-class AnglE:
+class AnglE(AngleBase):
     """
     AnglE. Everything is here👋
 
