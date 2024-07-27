@@ -29,17 +29,20 @@ class CorrelationEvaluator(object):
         self.labels = labels
         self.batch_size = batch_size
 
-    def __call__(self, model: AngleBase, **kwargs) -> dict:
+    def __call__(self, model: AngleBase, show_progress: bool = True, **kwargs) -> dict:
         """ Evaluate the model on the given dataset.
 
         :param model: AnglE, the model to evaluate.
+        :param show_progress: bool, whether to show a progress bar during evaluation.
         :param kwargs: Additional keyword arguments to pass to the `encode` method of the model.
 
         :return: dict, The evaluation results.
         """
         embeddings1 = []
         embeddings2 = []
-        for chunk in tqdm(chunked_iter(range(len(self.text1)), self.batch_size)):
+        for chunk in tqdm(chunked_iter(range(len(self.text1)), self.batch_size),
+                          total=len(self.text1)//self.batch_size,
+                          disable=show_progress):
             batch_text1 = [self.text1[i] for i in chunk]
             batch_text2 = [self.text2[i] for i in chunk]
 
