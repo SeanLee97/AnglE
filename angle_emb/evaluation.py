@@ -42,7 +42,7 @@ class CorrelationEvaluator(object):
         embeddings2 = []
         for chunk in tqdm(chunked_iter(range(len(self.text1)), self.batch_size),
                           total=len(self.text1)//self.batch_size,
-                          disable=show_progress):
+                          disable=not show_progress):
             batch_text1 = [self.text1[i] for i in chunk]
             batch_text2 = [self.text2[i] for i in chunk]
 
