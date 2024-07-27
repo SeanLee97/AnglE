@@ -1474,7 +1474,7 @@ class AnglE(AngleBase):
     def truncate_layer(self, layer_index: int):
         """ truncate layer
 
-        :param layer_index: int. layer index to be truncated.
+        :param layer_index: int. layers after layer_index will be truncated.
         :return: self
         """
         if len(self.backbone.encoder.layer) < layer_index:
