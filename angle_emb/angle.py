@@ -922,8 +922,8 @@ class AngleLoss:
     :param dataset_format: Optional[str]. Default None.
     """
     def __init__(self,
-                 cosine_w: float = 1.0,
-                 ibn_w: float = 1.0,
+                 cosine_w: float = 0.0,
+                 ibn_w: float = 20.0,
                  angle_w: float = 1.0,
                  cosine_tau: float = 20.0,
                  ibn_tau: float = 20.0,
