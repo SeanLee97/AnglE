@@ -218,12 +218,14 @@ from angle_emb.utils import cosine_similarity
 
 
 angle = AnglE.from_pretrained('mixedbread-ai/mxbai-embed-2d-large-v1', pooling_strategy='cls').cuda()
-# specify layer_index and embedding size to truncate embeddings
+# truncate layer
+angle = angle.truncate_layer(layer_index=22)
+# specify embedding size to truncate embeddings
 doc_vecs = angle.encode([
     'The weather is great!',
     'The weather is very good!',
     'i am going to bed'
-], layer_index=22, embedding_size=768)
+], embedding_size=768)
 
 for i, dv1 in enumerate(doc_vecs):
     for dv2 in doc_vecs[i+1:]:
@@ -247,6 +249,9 @@ print(vec)
 
 ## 🕸️ Custom Train
 
+💡 For more details, please refer to the [training and fintuning](https://angle.readthedocs.io/en/latest/notes/training.html).
+
+
 ### 🗂️ 1. Data Prepation
 
 We currently support three dataset formats:
@@ -259,7 +264,7 @@ We currently support three dataset formats:
 
 You need to prepare your data into huggingface `datasets.Dataset` in one of the formats in terms of your supervised data.
 
-### 🚂 2. Train with CLI
+### 🚂 2. Train with CLI [Recommended]
 
 Use `angle-trainer` to train your AnglE model in cli mode. 
 
@@ -316,7 +321,7 @@ angle.fit(
     gradient_accumulation_steps=1,
     loss_kwargs={
         'cosine_w': 1.0,
-        'ibn_w': 1.0,
+        'ibn_w': 20.0,
         'angle_w': 1.0,
         'cosine_tau': 20,
         'ibn_tau': 20,
@@ -348,6 +353,13 @@ print('Spearman\'s corrcoef:', corrcoef)
 3️⃣ If your dataset format is `DatasetFormats.C`, only `ibn_w` and `ibn_tau` are effective. You don't need to tune other parameters.
 
 4️⃣ To alleviate information forgetting in fine-tuning, it is better to specify the `teacher_name_or_path`. If the `teacher_name_or_path` equals `model_name_or_path`, it will conduct self-distillation. **It is worth to note that** `teacher_name_or_path` has to have the same tokenizer as `model_name_or_path`. Or it will lead to unexpected results.
+
+
+## 5. Finetuning and Infering AnglE with `sentence-transformers`
+
+- **Training:** SentenceTransformers also provides a implementation of [AnglE loss](https://sbert.net/docs/package_reference/sentence_transformer/losses.html#angleloss). **But it is partially implemented and may not work well as the official code. We recommend to use the official `angle_emb` for fine-tuning AnglE model.**
+
+- **Infering:** If your model is trained with `angle_emb`, and you want to use it with `sentence-transformers`. You can convert it to `sentence-transformers` model using the script `examples/convert_to_sentence_transformers.py`.
 
 
 # 🫡 Citation

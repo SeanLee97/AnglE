@@ -142,12 +142,14 @@ Specify `layer_index` and `embedding_size` to truncate embeddings.
 
 
     angle = AnglE.from_pretrained('mixedbread-ai/mxbai-embed-2d-large-v1', pooling_strategy='cls').cuda()
-    # specify layer_index and embedding_size to truncate embeddings
+   # truncate layer
+    angle = angle.truncate_layer(layer_index=22)
+    # specify embedding size to truncate embeddings
     doc_vecs = angle.encode([
         'The weather is great!',
         'The weather is very good!',
         'i am going to bed'
-    ], layer_index=22, embedding_size=768)
+    ], embedding_size=768)
 
     for i, dv1 in enumerate(doc_vecs):
         for dv2 in doc_vecs[i+1:]:

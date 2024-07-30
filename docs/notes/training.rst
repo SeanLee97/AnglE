@@ -140,7 +140,7 @@ You can also train a sentence embedding model using the `angle_emb` library. Her
         gradient_accumulation_steps=1,
         loss_kwargs={
             'cosine_w': 1.0,
-            'ibn_w': 1.0,
+            'ibn_w': 20.0,
             'angle_w': 1.0,
             'cosine_tau': 20,
             'ibn_tau': 20,
@@ -170,6 +170,16 @@ You can also train a sentence embedding model using the `angle_emb` library. Her
 3. If your dataset format is `DatasetFormats.C`, only `ibn_w` and `ibn_tau` are effective. You don't need to tune other parameters.
 
 4. To alleviate information forgetting in fine-tuning, it is better to specify the `teacher_name_or_path`. If the `teacher_name_or_path` equals `model_name_or_path`, it will conduct self-distillation. **Note that** `teacher_name_or_path` has to have the same tokenizer as `model_name_or_path`. Or it will lead to unexpected results.
+
+
+💡 Fine-tuning and Infering with `sentence-transformers`
+---------------------------------------------------------------------------
+
+
+1. **Training:** SentenceTransformers also provides a implementation of `AnglE loss <https://sbert.net/docs/package_reference/sentence_transformer/losses.html#angleloss>`_ 
+. **But it is partially implemented and may not work well as the official code. We recommend to use the official `angle_emb` for fine-tuning AnglE model.**
+
+2. **Infering:** If your model is trained with `angle_emb`, and you want to use it with `sentence-transformers`.  You can convert it to `sentence-transformers` model using the script `examples/convert_to_sentence_transformers.py <https://github.com/SeanLee97/AnglE/blob/main/scripts/convert_to_sentence_transformer.py>`_.
 
 
 
