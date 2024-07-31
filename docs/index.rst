@@ -75,6 +75,7 @@ AnglE is also a general sentence embedding inference framework, allowing for inf
 
    notes/quickstart.rst
    notes/installation.rst
+   notes/tutorial.rst
    notes/pretrained_models.rst
    notes/training.rst
    notes/evaluation.rst
