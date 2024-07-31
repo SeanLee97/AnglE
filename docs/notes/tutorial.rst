@@ -2,7 +2,7 @@
 ============================
 
 
-3-steps to train a powerful pubmed sentence embeddings.
+4-steps to train a powerful pubmed sentence embeddings.
 ------------------------------------------------------------
 
 This tutorial will guide you through the process of training powerful sentence embeddings using PubMed data with the AnglE framework. We'll cover data preparation, model training, and evaluation.
@@ -96,6 +96,7 @@ For convenience, we have processed the `PubMedQA pqa_labeled <https://huggingfac
 
 The following code demonstrates how to evaluate the trained `pubmed-angle-base-en` model:
 
+
 .. code-block:: python
 
     import os
@@ -136,3 +137,31 @@ Here, we compare the performance of our trained models with two popular models t
 
 The results show that our trained models, `WhereIsAI/pubmed-angle-base-en` and `WhereIsAI/pubmed-angle-large-en`, performs better than other popular models on the PubMedQA dataset, with the large model achieving the highest Spearman's correlation of **86.21**.
 
+
+Step 4: Use the model in your application
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+By using `angle-emb`, you can quickly load the model for your applications.
+
+.. code-block:: python
+
+    from angle_emb import AnglE
+    from angle_emb.utils import cosine_similarity
+
+    angle = AnglE.from_pretrained('WhereIsAI/pubmed-angle-base-en', pooling_strategy='cls').cuda()
+
+    query = 'How to treat childhood obesity and overweight?'
+    docs = [
+        query,
+        'The child is overweight. Parents should relieve their children\'s symptoms through physical activity and healthy eating. First, they can let them do some aerobic exercise, such as jogging, climbing, swimming, etc. In terms of diet, children should eat more cucumbers, carrots, spinach, etc. Parents should also discourage their children from eating fried foods and dried fruits, which are high in calories and fat. Parents should not let their children lie in bed without moving after eating. If their children\'s condition is serious during the treatment of childhood obesity, parents should go to the hospital for treatment under the guidance of a doctor in a timely manner.',
+        'If you want to treat tonsillitis better, you can choose some anti-inflammatory drugs under the guidance of a doctor, or use local drugs, such as washing the tonsil crypts, injecting drugs into the tonsils, etc. If your child has a sore throat, you can also give him or her some pain relievers. If your child has a fever, you can give him or her antipyretics. If the condition is serious, seek medical attention as soon as possible. If the medication does not have a good effect and the symptoms recur, the author suggests surgical treatment. Parents should also make sure to keep their children warm to prevent them from catching a cold and getting tonsillitis again.',
+    ]
+
+    embeddings = angle.encode(docs)
+    query_emb = embeddings[0]
+
+    for doc, emb in zip(docs[1:], embeddings[1:]):
+        print(cosine_similarity(query_emb, emb))
+
+    # 0.8029839020052982
+    # 0.4260630076818197
