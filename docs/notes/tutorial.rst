@@ -57,7 +57,7 @@ Here's an example of training a BERT-base model:
     --fp16 1
 
 
-And here's an example of training a BERT-large model:
+And here's another example of training a BERT-large model:
 
 .. code-block:: bash
 
@@ -84,15 +84,12 @@ And here's an example of training a BERT-large model:
     --fp16 1
 
 
-These examples use the `WhereIsAI/medical-triples` dataset and specify various hyperparameters for training. Adjust the hyperparameters as needed for your specific use case.
-
-
 Step 3: Evaluate the model
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 AnglE provides a `CorrelationEvaluator <https://angle.readthedocs.io/en/latest/notes/evaluation.html#spearman-and-pearson-correlation>`_ to evaluate the performance of sentence embeddings.
 
-For convenience, we have processed the `PubMedQA pqa_labeled <https://huggingface.co/datasets/qiaojin/PubMedQA/viewer/pqa_labeled>`_ data into the `DatasetFormats.A` format and made it available as `WhereIsAI/pubmedqa-test-angle-format-a <https://huggingface.co/datasets/WhereIsAI/pubmedqa-test-angle-format-a>`_ for evaluation purposes.
+For convenience, we have processed the `PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA/viewer/pqa_labeled>`_ pqa_labeled subset data into the `DatasetFormats.A` format and made it available in `WhereIsAI/pubmedqa-test-angle-format-a <https://huggingface.co/datasets/WhereIsAI/pubmedqa-test-angle-format-a>`_ for evaluation purposes.
 
 The following code demonstrates how to evaluate the trained `pubmed-angle-base-en` model:
 
@@ -135,7 +132,8 @@ Here, we compare the performance of our trained models with two popular models t
 +----------------------------------------+-------------------------+
 
 
-The results show that our trained models, `WhereIsAI/pubmed-angle-base-en` and `WhereIsAI/pubmed-angle-large-en`, performs better than other popular models on the PubMedQA dataset, with the large model achieving the highest Spearman's correlation of **86.21**.
+The results show that our trained models, `WhereIsAI/pubmed-angle-base-en` and `WhereIsAI/pubmed-angle-large-en`, performs better than other popular models on the PubMedQA dataset.
+The large model achieves the highest Spearman's correlation of **86.21**.
 
 
 Step 4: Use the model in your application
