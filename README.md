@@ -77,7 +77,7 @@ BERT-based models:
 | [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1) | 512 | cls | English, General-purpose |
 | [WhereIsAI/UAE-Code-Large-V1](https://huggingface.co/WhereIsAI/UAE-Code-Large-V1) |  512 | cls | Code Similarity |
 | [WhereIsAI/pubmed-angle-base-en](https://huggingface.co/WhereIsAI/pubmed-angle-base-en) |  512 | cls | Medical Similarity |
-| [WhereIsAI/pubmed-angle-base-en](https://huggingface.co/WhereIsAI/pubmed-angle-large-en) |  512 | cls | Medical Similarity |
+| [WhereIsAI/pubmed-angle-large-en](https://huggingface.co/WhereIsAI/pubmed-angle-large-en) |  512 | cls | Medical Similarity |
 
 LLM-based models:
 
