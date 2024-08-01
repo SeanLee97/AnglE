@@ -13,9 +13,15 @@ BERT-based models:
 +------------------------------------+-------------+-------------------+--------------------------+
 | `WhereIsAI/UAE-Code-Large-V1`_     | 512         | cls               | Code Similarity          |
 +------------------------------------+-------------+-------------------+--------------------------+
+| `WhereIsAI/pubmed-angle-base-en`_  | 512         | cls               | Medical Similarity       |
++------------------------------------+-------------+-------------------+--------------------------+
+| `WhereIsAI/pubmed-angle-large-en`_ | 512         | cls               | Medical Similarity       |
++------------------------------------+-------------+-------------------+--------------------------+
 
 .. _WhereIsAI/UAE-Large-V1: https://huggingface.co/WhereIsAI/UAE-Large-V1
 .. _WhereIsAI/UAE-Code-Large-V1: https://huggingface.co/WhereIsAI/UAE-Code-Large-V1
+.. _WhereIsAI/pubmed-angle-base-en: https://huggingface.co/WhereIsAI/pubmed-angle-base-en
+.. _WhereIsAI/pubmed-angle-large-en: https://huggingface.co/WhereIsAI/pubmed-angle-large-en
 
 
 LLM-based models:
