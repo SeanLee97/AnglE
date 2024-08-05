@@ -5,14 +5,14 @@
 4-steps to train a powerful pubmed sentence embeddings.
 ------------------------------------------------------------
 
-This tutorial will guide you through the process of training powerful sentence embeddings using PubMed data with the AnglE framework. We'll cover data preparation, model training, and evaluation.
+This tutorial will guide you through the process of training powerful sentence embeddings using PubMed data with the AnglE framework. It covers data preparation, model training, evaluation, and application.
 
 
 Step 1: Data preparation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
-Clean data from the `qiaojin/PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA>`_ dataset and prepare it into AnglE's `DatasetFormats.C <https://angle.readthedocs.io/en/latest/notes/training.html#data-prepration>`_ format.
+Clean pubmed data from the `qiaojin/PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA>`_ dataset, and prepare it into AnglE's `DatasetFormats.C <https://angle.readthedocs.io/en/latest/notes/training.html#data-prepration>`_ format.
 
 We have already processed the data and made it available on HuggingFace: `WhereIsAI/medical-triples <https://huggingface.co/datasets/WhereIsAI/medical-triples/viewer/all_pubmed_en_v1>`_. You can use this processed dataset for this tutorial.
 
@@ -21,13 +21,13 @@ Step 2: Train the model with `angle-trainer`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
-To train AnglE embeddings, you'll need to install the `angle-emb` package:
+To train AnglE embeddings, you need to install the `angle-emb` python library, as follows:
 
 .. code-block:: bash
 
     python -m pip install -U angle-emb
 
-The `angle-emb` package includes a user-friendly command-line interface called `angle-trainer <https://angle.readthedocs.io/en/latest/notes/training.html#angle-trainer-recommended>`_ for training AnglE embeddings.
+The `angle-emb` library includes a user-friendly command-line interface called `angle-trainer <https://angle.readthedocs.io/en/latest/notes/training.html#angle-trainer-recommended>`_ for training AnglE embeddings.
 
 With `angle-trainer`, you can quickly start model training by specifying the data path and `hyperparameters <https://angle.readthedocs.io/en/latest/notes/training.html#fine-tuning-tips>`_.
 
@@ -91,7 +91,7 @@ AnglE provides a `CorrelationEvaluator <https://angle.readthedocs.io/en/latest/n
 
 For convenience, we have processed the `PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA/viewer/pqa_labeled>`_ pqa_labeled subset data into the `DatasetFormats.A` format and made it available in `WhereIsAI/pubmedqa-test-angle-format-a <https://huggingface.co/datasets/WhereIsAI/pubmedqa-test-angle-format-a>`_ for evaluation purposes.
 
-The following code demonstrates how to evaluate the trained `pubmed-angle-base-en` model:
+The following code shows how to evaluate the trained `pubmed-angle-base-en` model:
 
 
 .. code-block:: python
@@ -116,7 +116,7 @@ The following code demonstrates how to evaluate the trained `pubmed-angle-base-e
     print(metric)
 
 
-Here, we compare the performance of our trained models with two popular models trained on PubMed data. The results are as follows:
+Here, we compare the performance of the trained models with two popular models trained on PubMed data. The results are as follows:
 
 
 +----------------------------------------+-------------------------+
@@ -132,8 +132,8 @@ Here, we compare the performance of our trained models with two popular models t
 +----------------------------------------+-------------------------+
 
 
-The results show that our trained models, `WhereIsAI/pubmed-angle-base-en` and `WhereIsAI/pubmed-angle-large-en`, performs better than other popular models on the PubMedQA dataset.
-The large model achieves the highest Spearman's correlation of **86.21**.
+The results show that the trained models, `WhereIsAI/pubmed-angle-base-en` and `WhereIsAI/pubmed-angle-large-en`, performs better than other popular models on the PubMedQA dataset.
+The large one achieves the highest Spearman's correlation of **86.21**.
 
 
 Step 4: Use the model in your application
