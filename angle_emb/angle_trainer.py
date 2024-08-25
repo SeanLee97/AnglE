@@ -80,8 +80,6 @@ parser.add_argument('--logging_steps', type=int, default=100,
                     help='Specify logging_steps, defaut 100')
 parser.add_argument('--pooling_strategy', type=str, default='cls',
                     help='Specify pooling_strategy from [`cls`, `last`, `avg`, `cls_avg`, `max`], default `cls`')
-parser.add_argument('--tokenizer_padding_side', type=str, default=None, choices=['left', 'right'],
-                    help='specify tokenizer padding side from [`left`, `right`], default None')
 parser.add_argument('--epochs', type=int, default=10, help='Specify epochs, default 10')
 parser.add_argument('--max_steps', type=int, default=-1,
                     help='Specify max steps, default -1 (Automatically calculated from epochs)')
@@ -101,6 +99,11 @@ parser.add_argument('--hub_private_repo', type=int, default=1, choices=[0, 1],
                     help='Specify hub_private_repo, default 1')
 parser.add_argument('--hub_model_id', type=str, default=None,
                     help='Specify hub_model_id, default None, format like organization/model_id')
+# configure tokenizer
+parser.add_argument('--tokenizer_padding', type=str, default="longest", choices=['longest', 'max_length'],
+                    help='Specify tokenizer padding from [`longest`, `max_length`], default `longest`')
+parser.add_argument('--tokenizer_padding_side', type=str, default=None, choices=['left', 'right'],
+                    help='specify tokenizer padding side from [`left`, `right`], default None')
 # configure LLM
 parser.add_argument('--is_llm', type=int, default=0, choices=[0, 1],
                     help='Specify is_llm, choices [0, 1], defaut 0')
@@ -272,6 +275,7 @@ def main():
         apply_ese=args.apply_ese,
         trainer_kwargs=trainer_kwargs,
         coword_random_mask_rate=args.coword_random_mask_rate,
+        padding=args.tokenizer_padding,
     )
 
 
