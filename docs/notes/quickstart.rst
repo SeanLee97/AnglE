@@ -154,3 +154,32 @@ Specify `layer_index` and `embedding_size` to truncate embeddings.
     for i, dv1 in enumerate(doc_vecs):
         for dv2 in doc_vecs[i+1:]:
             print(cosine_similarity(dv1, dv2))
+
+
+
+⌛ Batch Inference
+------------------------------------
+
+It is recommended to use Mixedbread's `batched` library to speed up the inference process.
+
+
+.. code-block:: bash
+
+    python -m pip install batched
+
+
+
+.. code-block:: python
+
+    import batched
+    from angle_emb import AnglE
+
+    model = AnglE.from_pretrained("WhereIsAI/UAE-Large-V1", pooling_strategy='cls').cuda()
+    model.encode = batched.dynamically(model.encode, batch_size=64)
+
+    vecs = model.encode([
+        'The weather is great!',
+        'The weather is very good!',
+        'i am going to bed'
+    ] * 50)
+

@@ -248,6 +248,27 @@ vec = model.encode('hello world', to_numpy=True)
 print(vec)
 ```
 
+## Batch Inference
+
+It is recommended to use Mixedbread's `batched` library to speed up the inference process.
+
+```bash
+python -m pip install batched
+```
+
+```python
+import batched
+from angle_emb import AnglE
+
+model = AnglE.from_pretrained("WhereIsAI/UAE-Large-V1", pooling_strategy='cls').cuda()
+model.encode = batched.dynamically(model.encode, batch_size=64)
+
+vecs = model.encode([
+    'The weather is great!',
+    'The weather is very good!',
+    'i am going to bed'
+] * 50)
+```
 
 ## 🕸️ Custom Train
 
