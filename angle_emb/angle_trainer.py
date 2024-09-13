@@ -15,6 +15,8 @@ from angle_emb.utils import logger
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_name_or_path', type=str, required=True,
                     help='Specify model name or path to set transformer backbone, required')
+parser.add_argument('--load_mlm_model', type=int, default=0, choices=[0, 1],
+                    help='Specify load_mlm_model, choices [0, 1], defaut 0')
 parser.add_argument('--tokenizer_name_or_path', type=str, default=None,
                     help='Specify tokenizer name or path. Default None, will use model_name_or_path')
 parser.add_argument('--pretrained_model_path', type=str, default=None,
@@ -78,8 +80,6 @@ parser.add_argument('--logging_steps', type=int, default=100,
                     help='Specify logging_steps, defaut 100')
 parser.add_argument('--pooling_strategy', type=str, default='cls',
                     help='Specify pooling_strategy from [`cls`, `last`, `avg`, `cls_avg`, `max`], default `cls`')
-parser.add_argument('--tokenizer_padding_side', type=str, default=None, choices=['left', 'right'],
-                    help='specify tokenizer padding side from [`left`, `right`], default None')
 parser.add_argument('--epochs', type=int, default=10, help='Specify epochs, default 10')
 parser.add_argument('--max_steps', type=int, default=-1,
                     help='Specify max steps, default -1 (Automatically calculated from epochs)')
@@ -99,6 +99,11 @@ parser.add_argument('--hub_private_repo', type=int, default=1, choices=[0, 1],
                     help='Specify hub_private_repo, default 1')
 parser.add_argument('--hub_model_id', type=str, default=None,
                     help='Specify hub_model_id, default None, format like organization/model_id')
+# configure tokenizer
+parser.add_argument('--tokenizer_padding', type=str, default="longest", choices=['longest', 'max_length'],
+                    help='Specify tokenizer padding from [`longest`, `max_length`], default `longest`')
+parser.add_argument('--tokenizer_padding_side', type=str, default=None, choices=['left', 'right'],
+                    help='specify tokenizer padding side from [`left`, `right`], default None')
 # configure LLM
 parser.add_argument('--is_llm', type=int, default=0, choices=[0, 1],
                     help='Specify is_llm, choices [0, 1], defaut 0')
@@ -118,6 +123,9 @@ parser.add_argument('--teacher_name_or_path', type=str, default=None,
                     help='Specify model_name_or_path for teacher alignment, default None')
 parser.add_argument('--teacher_pooling_strategy', type=str, default='cls',
                     help='Specify pooling strategy for teacher from [`cls`, `last`, `avg`, `cls_avg`, `max`], default `cls`')  # NOQA
+# configure coword_random_mask_rate
+parser.add_argument('--coword_random_mask_rate', type=float, default=0,
+                    help='Specify coword_random_mask_rate, default 0')
 # configure wandb
 parser.add_argument('--wandb_project', type=str, default=None, help='Specify WANDB_PROJECT, default None')
 parser.add_argument('--wandb_log_model', type=str, default=None, help='Specify WANDB_LOG_MODEL, default None')
@@ -158,6 +166,10 @@ lora_config = {
 if args.lora_target_modules is not None:
     lora_config['target_modules'] = [v.strip() for v in args.lora_target_modules.split(',') if v.strip()]
 
+if args.coword_random_mask_rate > 0 and not args.load_mlm_model:
+    logger.info('Detect coword_random_mask_rate > 0, automattically set load_mlm_model to 1')
+    args.load_mlm_model = 1
+
 
 def main():
     model = AnglE(args.model_name_or_path,
@@ -175,7 +187,8 @@ def main():
                   tokenizer_padding_side=args.tokenizer_padding_side,
                   is_llm=args.is_llm,
                   apply_billm=args.apply_billm,
-                  billm_model_class=args.billm_model_class)
+                  billm_model_class=args.billm_model_class,
+                  load_mlm_model=args.load_mlm_model)
 
     if os.path.exists(args.train_name_or_path):
         ds = load_dataset('json',
@@ -261,6 +274,8 @@ def main():
         argument_kwargs=argument_kwargs,
         apply_ese=args.apply_ese,
         trainer_kwargs=trainer_kwargs,
+        coword_random_mask_rate=args.coword_random_mask_rate,
+        padding=args.tokenizer_padding,
     )
 
 

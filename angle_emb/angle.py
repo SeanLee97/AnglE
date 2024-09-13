@@ -5,9 +5,10 @@ import re
 import sys
 import json
 import math
+import random
 from functools import partial
 from typing import Any, Dict, Optional, List, Union, Tuple, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import torch
 import torch.nn as nn
@@ -15,9 +16,8 @@ import torch.nn.functional as F
 import bitsandbytes as bnb
 from datasets import Dataset
 from transformers import (
-    AutoModelForCausalLM, AutoModel, AutoTokenizer,
-    PreTrainedModel, Trainer, TrainingArguments,
-    TrainerCallback, BitsAndBytesConfig
+    AutoModelForCausalLM, AutoModel, AutoModelForMaskedLM, AutoTokenizer,
+    PreTrainedModel, Trainer, TrainingArguments, TrainerCallback, BitsAndBytesConfig
 )
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import PaddingStrategy
@@ -31,6 +31,7 @@ from peft.tuners.lora import LoraLayer
 from .base import AngleBase
 from .utils import logger
 from .evaluation import CorrelationEvaluator
+from .version import __version__
 
 
 DEFAULT_LLM_PATTERNS = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*', r'.*mistral.*']
@@ -248,13 +249,13 @@ def check_llm(model_name_or_path: str, llm_regex_patterns: List[str] = None) -> 
 def get_pooling(outputs: torch.Tensor,
                 inputs: Dict,
                 pooling_strategy: str,
-                padding_strategy: str = 'right') -> torch.Tensor:
+                padding_side: str) -> torch.Tensor:
     """ Pooling the model outputs.
 
     :param outputs:  torch.Tensor. Model outputs (without pooling)
     :param inputs:  Dict. Model inputs
     :param pooling_strategy:  str. Pooling strategy ['cls', 'cls_avg', 'cls_max', 'last', 'avg', 'max', 'all', index]
-    :param padding_strategy:  str. Padding strategy of tokenizers (`left` or `right`).
+    :param padding_side:  str. Padding strategy of tokenizers (`left` or `right`).
         It can be obtained by `tokenizer.padding_side`.
     """
     if pooling_strategy == 'cls':
@@ -268,7 +269,7 @@ def get_pooling(outputs: torch.Tensor,
         outputs = (outputs[:, 0] + maximum) / 2.0
     elif pooling_strategy == 'last':
         batch_size = inputs['input_ids'].shape[0]
-        sequence_lengths = -1 if padding_strategy == 'left' else inputs["attention_mask"].sum(dim=1) - 1
+        sequence_lengths = -1 if padding_side == 'left' else inputs["attention_mask"].sum(dim=1) - 1
         outputs = outputs[torch.arange(batch_size, device=outputs.device), sequence_lengths]
     elif pooling_strategy == 'avg':
         outputs = torch.sum(
@@ -517,7 +518,8 @@ class AngleDataTokenizer:
         combined_tok['seperate_ids'] = seperate_ids
         combined_tok['extra'] = {
             'dataset_format': self.dataset_format,
-            'end_with_eos': self.end_with_eos
+            'end_with_eos': self.end_with_eos,
+            'prompt_token_ids': self.prompt_template_tok['input_ids'] if self.prompt_template_tok is not None else None,
         }
         return combined_tok
 
@@ -533,12 +535,19 @@ class AngleDataCollator:
     :param max_length:  Optional[int], max length
     :param return_tensors:  str
     :param filter_duplicate: bool. Whether filter duplicate data
+    :param coword_random_mask_rate: float. Default 0.0.
+        If set it greater than 0, the random maked token prediction will be added to the training loss.
     """
+
     tokenizer: PreTrainedTokenizerBase
     padding: Union[bool, str, PaddingStrategy] = 'longest'
     max_length: Optional[int] = None
     return_tensors: str = "pt"
     filter_duplicate: bool = True
+    coword_random_mask_rate: float = 0.0
+    special_token_id_names: List[str] = field(default_factory=lambda: [
+        'bos_token_id', 'eos_token_id', 'unk_token_id', 'sep_token_id',
+        'pad_token_id', 'cls_token_id', 'mask_token_id'])
 
     def __call__(self, features: List[Dict], return_tensors: str = "pt") -> Dict[str, torch.Tensor]:
         """ Collate function for AngleDataTokenizer.
@@ -551,6 +560,20 @@ class AngleDataCollator:
             return_tensors = self.return_tensors
         has_token_type_ids = "token_type_ids" in features[0]
         end_with_eos = features[0]['extra']['end_with_eos']
+        prompt_token_ids = set(features[0]['extra']['prompt_token_ids'] or [])
+        special_token_ids = set()
+        for name in self.special_token_id_names:
+            if hasattr(self.tokenizer, name):
+                special_token_ids.add(getattr(self.tokenizer, name))
+        for token in self.tokenizer.additional_special_tokens:
+            special_token_ids.add(self.tokenizer.encode(token)[0])
+        predefined_token_ids = prompt_token_ids | special_token_ids
+
+        if self.coword_random_mask_rate > 0:
+            if not isinstance(self.tokenizer.mask_token_id, int):
+                raise NotImplementedError("Failed to train with random mask common tokens"
+                                          "since the tokenizer does not have a mask token."
+                                          "Please set a special mask token to the tokenizer manually.")
 
         new_features = []
         duplicate_set = set()
@@ -602,6 +625,32 @@ class AngleDataCollator:
 
             if self.filter_duplicate and is_duplicate:
                 continue
+
+            if self.coword_random_mask_rate > 0:
+                first_text_tokens = set(current_features[0]['input_ids']) - predefined_token_ids
+                common_tokens_with_first_text = set()
+                for cnt_fea in current_features[1:]:
+                    cnt_tokens = set(cnt_fea['input_ids']) - predefined_token_ids
+                    cnt_common_tokens = list(cnt_tokens & first_text_tokens)
+                    common_tokens_with_first_text.update(cnt_common_tokens)
+                    if cnt_common_tokens:
+                        sample_size = max(1, int(len(cnt_common_tokens) * self.coword_random_mask_rate))
+                        sampled_mask_tokens = random.sample(cnt_common_tokens, sample_size)
+                        cnt_fea['input_ids'] = [self.tokenizer.mask_token_id
+                                                if idx in sampled_mask_tokens
+                                                else idx for idx in cnt_fea['input_ids']]
+                    cnt_fea['mask_target_labels'] = cnt_fea['input_ids']
+
+                # mask first text
+                common_tokens_with_first_text = list(common_tokens_with_first_text)
+                if common_tokens_with_first_text:
+                    sample_size = max(1, int(len(common_tokens_with_first_text) * self.coword_random_mask_rate))
+                    sampled_mask_tokens = random.sample(common_tokens_with_first_text, sample_size)
+                    current_features[0]['input_ids'] = [self.tokenizer.mask_token_id
+                                                        if idx in sampled_mask_tokens
+                                                        else idx for idx in current_features[0]['input_ids']]
+                current_features[0]['mask_target_labels'] = current_features[0]['input_ids']
+
             new_features += current_features
 
         # remove features
@@ -625,6 +674,14 @@ class AngleDataCollator:
             )
         features['labels'] = torch.Tensor([feature['labels'] for feature in new_features])
 
+        if self.coword_random_mask_rate > 0:
+            features['mask_target_labels'] = self.tokenizer.pad(
+                    {'input_ids': [feature['mask_target_labels'] for feature in new_features]},
+                    padding=self.padding,
+                    max_length=self.max_length,
+                    return_tensors=return_tensors,
+                )['input_ids']
+
         return features
 
 
@@ -634,16 +691,16 @@ class Pooler:
 
     :param model: PreTrainedModel
     :param pooling_strategy: Optional[str]. Currently support [`cls`, `last`, `avg`, `cls_avg`, `max`]. Default None.
-    :param padding_strategy: Optional[str]. `left` or `right`. Default None.
+    :param padding_side: Optional[str]. `left` or `right`. Default None.
     :param is_llm: bool. Default False
     """
     def __init__(self,
                  model: PreTrainedModel,
                  pooling_strategy: Optional[Union[int, str]] = None,
-                 padding_strategy: Optional[str] = None):
+                 padding_side: Optional[str] = None):
         self.model = model
         self.pooling_strategy = pooling_strategy
-        self.padding_strategy = padding_strategy
+        self.padding_side = padding_side
 
     def __call__(self,
                  inputs: Dict,
@@ -651,7 +708,8 @@ class Pooler:
                  embedding_start: Optional[int] = None,
                  embedding_size: Optional[int] = None,
                  return_all_layer_outputs: bool = False,
-                 pooling_strategy: Optional[Union[int, str]] = None,) -> torch.Tensor:
+                 pooling_strategy: Optional[Union[int, str]] = None,
+                 return_mlm_logits: bool = False) -> torch.Tensor:
         """ Get sentence embeddings.
 
         :param inputs: Dict. Model inputs.
@@ -661,14 +719,16 @@ class Pooler:
         :param return_all_layer_outputs: bool. Return all layer outputs or not. Default False.
         :param pooling_strategy: Optional[str].
             Currently support [`cls`, `last`, `avg`, `cls_avg`, `max`]. Default None.
+        :param return_mlm_logits: bool. Return logits or not. Default False.
         """
-        all_layer_outputs = self.model(output_hidden_states=True, return_dict=True, **inputs).hidden_states
+        ret = self.model(output_hidden_states=True, return_dict=True, **inputs)
+        all_layer_outputs = ret.hidden_states
         if return_all_layer_outputs:
-            return all_layer_outputs
+            return (all_layer_outputs, ret.logits) if return_mlm_logits else all_layer_outputs
         outputs = all_layer_outputs[layer_index]
         outputs = get_pooling(outputs, inputs,
                               pooling_strategy or self.pooling_strategy,
-                              padding_strategy=self.padding_strategy)
+                              padding_side=self.padding_side)
         n_dim = len(outputs.shape)
         if embedding_start is not None:
             if n_dim == 2:
@@ -685,7 +745,7 @@ class Pooler:
                 outputs = outputs[:, :, :embedding_size]
             else:
                 raise ValueError(f'Unsupported output shape: {outputs.shape}')
-        return outputs
+        return (outputs, ret.logits) if return_mlm_logits else outputs
 
 
 class AngleTrainer(Trainer):
@@ -704,9 +764,11 @@ class AngleTrainer(Trainer):
                  dataset_format: str = DatasetFormats.A,
                  teacher_name_or_path: Optional[str] = None,
                  teacher_pooling_strategy: str = 'cls',
+                 pad_token_id: int = 0,
                  **kwargs):
         super().__init__(**kwargs)
         self.pooler = pooler
+        self.pad_token_id = pad_token_id
         if loss_kwargs is None:
             loss_kwargs = {}
         self.loss_fct = AngleLoss(dataset_format=dataset_format, **loss_kwargs)
@@ -725,14 +787,14 @@ class AngleTrainer(Trainer):
             self.teacher_pooler = Pooler(
                 teacher_backbone,
                 pooling_strategy=self.teacher_pooling_strategy,
-                padding_strategy=self.pooler.padding_strategy)
+                padding_side=self.pooler.padding_side)
             logger.info(f'Train with teacher={teacher_name_or_path}')
 
-    def distillation_loss(self,
-                          inputs: torch.Tensor,
-                          targets: torch.Tensor,
-                          mse_weight: float = 1.0,
-                          kl_temperature: float = 1.0) -> torch.Tensor:
+    def compute_distillation_loss(self,
+                                  inputs: torch.Tensor,
+                                  targets: torch.Tensor,
+                                  mse_weight: float = 1.0,
+                                  kl_temperature: float = 1.0) -> torch.Tensor:
         """ Compute distillation loss.
 
         :param inputs: torch.Tensor. Input tensor.
@@ -752,6 +814,13 @@ class AngleTrainer(Trainer):
             ) * kl_temperature
         return loss
 
+    def compute_mlm_loss(self, logits, mask_target_labels):
+        return F.cross_entropy(
+            logits.transpose(1, 2),
+            mask_target_labels,
+            ignore_index=self.pad_token_id,
+        )
+
     def compute_loss(self, model, inputs, return_outputs=False):
         """ Compute loss for AnglE.
 
@@ -762,25 +831,31 @@ class AngleTrainer(Trainer):
         :return: torch.Tensor. Loss.
         """
         labels = inputs.pop("labels", None)
+        mask_target_labels = inputs.pop("mask_target_labels", None)
+        if mask_target_labels is not None:
+            all_layer_outputs, mlm_logits = self.pooler(
+                inputs, layer_index=-1, return_all_layer_outputs=True, return_mlm_logits=True)
+        else:
+            all_layer_outputs = self.pooler(inputs, layer_index=-1, return_all_layer_outputs=True)
+        all_outputs = all_layer_outputs[-1]
+        outputs = get_pooling(all_outputs, inputs,
+                              self.pooler.pooling_strategy,
+                              self.pooler.padding_side)
+        loss = self.loss_fct(labels, outputs)
         if self.teacher_name_or_path is not None:
-            all_outputs = self.pooler(inputs, layer_index=-1, return_all_layer_outputs=True)[-1]
-            outputs = get_pooling(all_outputs, inputs,
-                                  self.pooler.pooling_strategy,
-                                  self.pooler.padding_strategy)
-            loss = self.loss_fct(labels, outputs)
             with torch.no_grad():
                 self.teacher_pooler.model = self.teacher_pooler.model.to(self.pooler.model.device)
                 align_outputs = self.teacher_pooler(inputs)
 
-            alignment_loss = self.distillation_loss(
+            alignment_loss = self.compute_distillation_loss(
                 all_outputs if self.teacher_pooling_strategy == 'all' else outputs,
                 align_outputs,
                 mse_weight=0.0,
                 kl_temperature=1.0)
             loss += alignment_loss
-        else:
-            outputs = self.pooler(inputs)
-            loss = self.loss_fct(labels, outputs)
+
+        if mask_target_labels is not None:
+            loss += self.compute_mlm_loss(mlm_logits, mask_target_labels)
 
         return (loss, outputs) if return_outputs else loss
 
@@ -835,7 +910,7 @@ class AngleESETrainer(AngleTrainer):
                              all_layer_outputs: torch.Tensor,
                              labels: torch.Tensor,
                              pooling_strategy: str,
-                             padding_strategy: str) -> torch.Tensor:
+                             padding_side: str) -> torch.Tensor:
         loss = 0.
         compression_loss = 0.
         for i in range(self.n_layers - 1):
@@ -844,12 +919,12 @@ class AngleESETrainer(AngleTrainer):
             student_outputs = get_pooling(all_student_outputs,
                                           inputs,
                                           pooling_strategy,
-                                          padding_strategy)
+                                          padding_side)
 
             slimmed_outputs = student_outputs[:, :self.ese_compression_size]
             loss += self.loss_fct(labels, slimmed_outputs) / division
             if self.apply_ese_pca:
-                compression_loss += self.distillation_loss(
+                compression_loss += self.compute_distillation_loss(
                     slimmed_outputs,
                     self.pca_compress(student_outputs, self.ese_compression_size),
                     kl_temperature=self.ese_kl_temperature
@@ -866,19 +941,24 @@ class AngleESETrainer(AngleTrainer):
         :return: torch.Tensor. Loss.
         """
         labels = inputs.pop("labels", None)
+        mask_target_labels = inputs.pop("mask_target_labels", None)
         # layer
-        all_layer_outputs = self.pooler(inputs, layer_index=-1, return_all_layer_outputs=True)
+        if mask_target_labels is not None:
+            all_layer_outputs, mlm_logits = self.pooler(
+                inputs, layer_index=-1, return_all_layer_outputs=True, return_mlm_logits=True)
+        else:
+            all_layer_outputs = self.pooler(inputs, layer_index=-1, return_all_layer_outputs=True)
         all_teacher_outputs = all_layer_outputs[-1]
         teacher_outputs = get_pooling(all_teacher_outputs, inputs,
                                       self.pooler.pooling_strategy,
-                                      self.pooler.padding_strategy)
+                                      self.pooler.padding_side)
 
         loss = self.loss_fct(labels, teacher_outputs)
 
         slimmed_outputs = teacher_outputs[:, :self.ese_compression_size]
         loss += self.loss_fct(labels, slimmed_outputs)
         if self.apply_ese_pca:
-            loss += self.distillation_loss(
+            loss += self.compute_distillation_loss(
                 slimmed_outputs,
                 self.pca_compress(teacher_outputs, self.ese_compression_size),
                 kl_temperature=self.ese_kl_temperature
@@ -890,7 +970,7 @@ class AngleESETrainer(AngleTrainer):
             all_layer_outputs,
             labels,
             self.pooler.pooling_strategy,
-            self.pooler.padding_strategy,
+            self.pooler.padding_side,
         )
 
         # alignment loss
@@ -898,13 +978,17 @@ class AngleESETrainer(AngleTrainer):
             with torch.no_grad():
                 self.teacher_pooler.model = self.teacher_pooler.model.to(self.pooler.model.device)
                 align_outputs = self.teacher_pooler(inputs)
-                alignment_loss = self.distillation_loss(
+                alignment_loss = self.compute_distillation_loss(
                     all_teacher_outputs if self.teacher_pooling_strategy == 'all' else teacher_outputs,
                     align_outputs,
                     mse_weight=0.0,
                     kl_temperature=1.0
                 )
                 loss += alignment_loss
+
+        if mask_target_labels is not None:
+            loss += self.compute_mlm_loss(mlm_logits, mask_target_labels)
+
         return (loss, teacher_outputs) if return_outputs else loss
 
 
@@ -1017,9 +1101,13 @@ class AnglE(AngleBase):
     :param kbit_kwargs: Optional[Dict]. kwargs for kbit. Default None.
         details refer to: https://huggingface.co/docs/peft/package_reference/peft_model#peft.prepare_model_for_kbit_training
     :param tokenizer_padding_side: Optional[str]. Specify tokenizer padding side from [`left`, `right`]. Default None.
+    :param apply_billm: bool. Whether apply billm. Default False.
+    :param billm_model_class: Optional[str]. Specify billm model class. Default None.
+    :param load_mlm_model: bool. Whether load mlm model. Default False. If set True, it will load model with AutoModelForMaskedLM.
     :param **kwargs: Any.
     """  # NOQA
-    cfg_file_name = 'angle.config'
+    cfg_file_name = 'angle_config.json'
+    special_columns = ['labels', 'seperate_ids', 'extra', 'mask_target_labels']
 
     def __init__(self,
                  model_name_or_path: str,
@@ -1040,6 +1128,7 @@ class AnglE(AngleBase):
                  tokenizer_padding_side: Optional[str] = None,
                  apply_billm: bool = False,
                  billm_model_class: Optional[str] = None,
+                 load_mlm_model: bool = False,
                  **kwargs: Any):
         super().__init__()
         self.max_length = max_length
@@ -1047,6 +1136,7 @@ class AnglE(AngleBase):
         self.pooling_strategy = pooling_strategy
         self.load_kbit = load_kbit
         self.is_llm = is_llm
+        self.load_mlm_model = load_mlm_model
         if device:
             self.device = device
         else:
@@ -1179,9 +1269,10 @@ class AnglE(AngleBase):
                                                     torch_dtype=torch_dtype or torch.float16)
                 self.backbone = model
         else:
+            MODEL_CLASS = AutoModelForMaskedLM if load_mlm_model else AutoModel
             # non-LLMs
             if self.apply_lora:
-                model = AutoModel.from_pretrained(pretrained_model_path or model_name_or_path, trust_remote_code=True)
+                model = MODEL_CLASS.from_pretrained(pretrained_model_path or model_name_or_path, trust_remote_code=True)
                 if pretrained_lora_path is not None:
                     model = PeftModel.from_pretrained(
                         model,
@@ -1199,7 +1290,7 @@ class AnglE(AngleBase):
             else:
                 if pretrained_model_path is not None:
                     logger.info(f'Load pretrained model from {pretrained_model_path}')
-                self.backbone = AutoModel.from_pretrained(
+                self.backbone = MODEL_CLASS.from_pretrained(
                     pretrained_model_path or model_name_or_path,
                     trust_remote_code=True)
 
@@ -1210,7 +1301,7 @@ class AnglE(AngleBase):
         self.pooler = Pooler(
             self.backbone,
             pooling_strategy=self.pooling_strategy,
-            padding_strategy=self.tokenizer.padding_side)
+            padding_side=self.tokenizer.padding_side)
 
         self.__cfg = {
             'model_name_or_path': model_name_or_path,
@@ -1223,6 +1314,7 @@ class AnglE(AngleBase):
             'billm_model_class': billm_model_class,
             'apply_lora': self.apply_lora,
             'tokenizer_padding_side': tokenizer_padding_side,
+            'angle_emb_version': __version__,
         }
         self.__cfg.update(kwargs)
 
@@ -1339,7 +1431,9 @@ class AnglE(AngleBase):
             filter_duplicate: bool = True,
             push_to_hub: bool = False,
             hub_model_id: Optional[str] = None,
-            hub_private_repo: bool = True):
+            hub_private_repo: bool = True,
+            coword_random_mask_rate: float = 0.,
+            padding: str = 'longest'):
         """
         Fit using AnglE.
 
@@ -1366,6 +1460,8 @@ class AnglE(AngleBase):
         :param push_to_hub: bool, whether push to hub.
         :param hub_model_id: Optional[str], hub model id.
         :param hub_private_repo: bool, whether push to private repo.
+        :param coword_random_mask_rate: float, random mask common token rate. Default 0.
+        :param padding: str, padding strategy of tokenizer. Default 'longest'.
         """  # NOQA
         if output_dir is not None:
             os.makedirs(output_dir, exist_ok=True)
@@ -1414,6 +1510,9 @@ class AnglE(AngleBase):
             argument_kwargs['push_to_hub'] = False
             callbacks = [evaluate_callback]
 
+        if coword_random_mask_rate > 0:
+            logger.info(f'Trained with random mask common tokens.'
+                        f'coword_random_mask_rate={coword_random_mask_rate}')
         CustomTrainer = AngleESETrainer if apply_ese else AngleTrainer
         trainer = CustomTrainer(
             pooler=self.pooler,
@@ -1438,12 +1537,17 @@ class AnglE(AngleBase):
                 save_total_limit=save_total_limit,
                 load_best_model_at_end=False,
                 ddp_find_unused_parameters=False if self.gpu_count > 1 else None,
-                label_names=['labels', 'seperate_ids', 'extra'],
+                label_names=AnglE.special_columns,
                 **argument_kwargs,
             ),
             callbacks=callbacks,
             data_collator=AngleDataCollator(
-                self.tokenizer, return_tensors="pt", max_length=self.max_length, filter_duplicate=filter_duplicate
+                self.tokenizer,
+                padding=padding,
+                return_tensors="pt",
+                max_length=self.max_length,
+                filter_duplicate=filter_duplicate,
+                coword_random_mask_rate=coword_random_mask_rate,
             ),
             **trainer_kwargs
         )
@@ -1491,7 +1595,8 @@ class AnglE(AngleBase):
                embedding_size: Optional[int] = None,
                device: Optional[Any] = None,
                prompt: Optional[str] = None,
-               normalize_embedding: bool = False):
+               normalize_embedding: bool = False,
+               padding: str = 'longest'):
         """
         encode texts.
 
@@ -1504,6 +1609,7 @@ class AnglE(AngleBase):
         :param device: Optional[Any]. Default None.
         :param prompt: Optional[str]. Default None.
         :param normalize_embedding: bool. Default False.
+        :param padding: str. Padding strategy of tokenizer. Default 'longest'.
         """
         self.backbone.eval()
 
@@ -1527,11 +1633,11 @@ class AnglE(AngleBase):
                 max_length=max_length or self.max_length,
                 truncation=True)
             tok['input_ids'] = [input_ids + [self.tokenizer.eos_token_id] for input_ids in tok['input_ids']]
-            tok = self.tokenizer.pad(tok, padding=True, return_attention_mask=True, return_tensors='pt')
+            tok = self.tokenizer.pad(tok, padding=padding, return_attention_mask=True, return_tensors='pt')
         else:
             tok = self.tokenizer(
                 inputs,
-                padding='longest',
+                padding=padding,
                 max_length=max_length or self.max_length,
                 truncation=True,
                 return_tensors='pt')
@@ -1567,7 +1673,7 @@ class AnglE(AngleBase):
         """
         if not exist_ok and os.path.exists(output_dir):
             raise ValueError(f"Output directory ({output_dir}) already exists and is not empty.")
-        os.makedirs(output_dir)
+        os.makedirs(output_dir, exist_ok=exist_ok)
         self.tokenizer.save_pretrained(output_dir)
         self.backbone.save_pretrained(output_dir)
 
