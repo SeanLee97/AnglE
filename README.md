@@ -1,8 +1,7 @@
 <small>EN | [简体中文](README_zh.md) </small>
 
-# AnglE📐
-
-> It is Angle 📐, not Angel 👼.
+# AnglE 📐
+> <small>Sponsored by <a href="https://www.mixedbread.ai/">Mixedbread</a></small>
 
 **For more detailed usage, please read the 📘 document:** https://angle.readthedocs.io/en/latest/index.html
 
