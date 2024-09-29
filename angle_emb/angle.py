@@ -857,6 +857,7 @@ class AngleTrainer(Trainer):
         if mask_target_labels is not None:
             loss += self.compute_mlm_loss(mlm_logits, mask_target_labels)
 
+        inputs['labels'] = None  # avoid evaluation error
         return (loss, outputs) if return_outputs else loss
 
 
@@ -989,6 +990,7 @@ class AngleESETrainer(AngleTrainer):
         if mask_target_labels is not None:
             loss += self.compute_mlm_loss(mlm_logits, mask_target_labels)
 
+        inputs['labels'] = None  # avoid evaluation error
         return (loss, teacher_outputs) if return_outputs else loss
 
 
