@@ -35,6 +35,12 @@ parser.add_argument('--valid_subset_name', type=str, default=None,
                     help='Specify huggingface datasets subset name for valid set, default None')
 parser.add_argument('--valid_split_name', type=str, default='train',
                     help='Specify huggingface datasets split name for valid set, default `train`')
+parser.add_argument('--valid_name_or_path_for_callback', type=str, default=None,
+                    help='Specify huggingface datasets name or local file path for valid set for callback use, default None.')
+parser.add_argument('--valid_subset_name_for_callback', type=str, default=None,
+                    help='Specify huggingface datasets subset name for valid set for callback use, default None')
+parser.add_argument('--valid_split_name_for_callback', type=str, default='train',
+                    help='Specify huggingface datasets split name for valid set for callback use, default `train`')
 parser.add_argument('--prompt_template', type=str, default=None,
                     help='Specify prompt_template like "xxx: {text}", default None.'
                          'This prompt will be applied for all text columns.'
@@ -228,6 +234,25 @@ def main():
         valid_ds = valid_ds[args.valid_split_name or 'train'].map(
             AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template),
             num_proc=args.workers)
+    
+    valid_ds_for_callback = None
+    if valid_ds_for_callback is None and args.valid_name_or_path_for_callback is not None:
+        logger.info('Validation for callback detected, processing validation...')
+        if os.path.exists(args.valid_name_or_path_for_callback):
+            valid_ds_for_callback = load_dataset(
+                'json', data_files=[args.valid_name_or_path_for_callback], num_proc=args.workers)
+        else:
+            if args.valid_subset_name_for_callback is not None:
+                valid_ds_for_callback = load_dataset(
+                    args.valid_name_or_path_for_callback,
+                    args.valid_subset_name_for_callback,
+                    num_proc=args.workers)
+            else:
+                valid_ds_for_callback = load_dataset(
+                    args.valid_name_or_path_for_callback, num_proc=args.workers)
+        valid_ds_for_callback = valid_ds_for_callback[args.valid_split_name_for_callback or 'train'].map(
+            AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template),
+            num_proc=args.workers)
 
     argument_kwargs = {}
     if args.push_to_hub:
@@ -256,6 +281,7 @@ def main():
     model.fit(
         train_ds=train_ds,
         valid_ds=valid_ds,
+        valid_ds_for_callback=valid_ds_for_callback,
         output_dir=args.save_dir,
         batch_size=args.batch_size,
         epochs=args.epochs,

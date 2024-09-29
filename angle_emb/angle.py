@@ -1412,13 +1412,15 @@ class AnglE(AngleBase):
     def fit(self,
             train_ds: Dataset,
             valid_ds: Optional[Dataset] = None,
+            valid_ds_for_callback: Optional[Dataset] = None,
             batch_size: int = 32,
             output_dir: Optional[str] = None,
             epochs: int = 1,
             learning_rate: float = 1e-5,
             warmup_steps: int = 1000,
             logging_steps: int = 10,
-            eval_steps: Optional[int] = None,
+            eval_steps: int = 1000,
+            evaluation_strategy: str = 'steps',
             save_steps: int = 100,
             save_strategy: str = 'steps',
             save_total_limit: int = 10,
@@ -1439,13 +1441,17 @@ class AnglE(AngleBase):
 
         :param train_ds: Dataset. tokenized train dataset. Required.
         :param valid_ds: Optional[Dataset]. tokenized valid dataset. Default None.
+        :param valid_ds_for_callback: Optional[Dataset]. tokenized valid dataset for callback use.
+            The dataset format should be `DatasetFormats.A`. The spearmans' correlation will be computed
+            after each epoch training and the best model will be saved. Default None.
         :param batch_size: int. Default 32.
         :param output_dir: Optional[str]. save dir. Default None.
         :param epochs: int. Default 1.
         :param learning_rate: float. Default 1e-5.
         :param warmup_steps: int. Default 1000.
         :param logging_steps: int. Default 10.
-        :param eval_steps: Optional[int]. Default None.
+        :param eval_steps: int. Default 1000.
+        :param evaluation_strategy: str. Default 'steps'.
         :param save_steps: int. Default 100.
         :param save_strategy: str. Default steps.
         :param save_total_limit: int. Default 10.
@@ -1491,16 +1497,16 @@ class AnglE(AngleBase):
             trainer_kwargs = {}
 
         callbacks = None
-        if valid_ds is not None:
+        if valid_ds_for_callback is not None:
             # check format
-            for obj in valid_ds:
+            for obj in valid_ds_for_callback:
                 if obj['extra']['dataset_format'] != DatasetFormats.A:
                     raise ValueError('Currently only support evaluation for DatasetFormats.A.')
                 break
             best_ckpt_dir = None
             if output_dir is not None:
                 best_ckpt_dir = os.path.join(output_dir, 'best-checkpoint')
-            evaluate_callback = EvaluateCallback(self, valid_ds,
+            evaluate_callback = EvaluateCallback(self, valid_ds_for_callback,
                                                  partial(self.evaluate, batch_size=batch_size),
                                                  save_dir=best_ckpt_dir,
                                                  push_to_hub=push_to_hub,
@@ -1519,7 +1525,7 @@ class AnglE(AngleBase):
             model=self.backbone,
             dataset_format=self.detect_dataset_format(train_ds),
             train_dataset=train_ds,
-            eval_dataset=None,
+            eval_dataset=valid_ds,
             loss_kwargs=loss_kwargs,
             tokenizer=self.tokenizer,
             args=TrainingArguments(
@@ -1531,6 +1537,7 @@ class AnglE(AngleBase):
                 fp16=fp16,
                 logging_steps=logging_steps,
                 save_strategy=save_strategy,
+                evaluation_strategy=evaluation_strategy,
                 eval_steps=eval_steps,
                 save_steps=save_steps,
                 output_dir=output_dir,
