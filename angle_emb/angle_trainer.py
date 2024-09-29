@@ -40,6 +40,8 @@ parser.add_argument('--prompt_template', type=str, default=None,
                          'This prompt will be applied for all text columns.'
                          'If you want to specify different prompts for different text columns,'
                          'please handle it in the preprocessing step.')
+parser.add_argument('--filter_duplicate', type=int, default=1, choices=[0, 1],
+                    help='Specify filter_duplicate, choices [0, 1], defaut 1')
 parser.add_argument('--save_dir', type=str, default=None,
                     help='Specify save dir, default None')
 parser.add_argument('--seed', type=int, default=-1,
@@ -271,6 +273,7 @@ def main():
             'angle_tau': args.angle_tau,
         },
         fp16=args.fp16,
+        filter_duplicate=args.filter_duplicate,
         argument_kwargs=argument_kwargs,
         apply_ese=args.apply_ese,
         trainer_kwargs=trainer_kwargs,
