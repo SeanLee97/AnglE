@@ -1526,7 +1526,6 @@ class AnglE(AngleBase):
             dataset_format=self.detect_dataset_format(train_ds),
             train_dataset=train_ds,
             eval_dataset=valid_ds,
-            compute_metrics=None,  # do not compute metrics
             loss_kwargs=loss_kwargs,
             tokenizer=self.tokenizer,
             args=TrainingArguments(
@@ -1539,6 +1538,7 @@ class AnglE(AngleBase):
                 logging_steps=logging_steps,
                 save_strategy=save_strategy,
                 evaluation_strategy=evaluation_strategy,
+                prediction_loss_only=True,
                 eval_steps=eval_steps,
                 save_steps=save_steps,
                 output_dir=output_dir,
