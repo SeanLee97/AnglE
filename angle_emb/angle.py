@@ -859,6 +859,7 @@ class AngleTrainer(Trainer):
 
         return (loss, outputs) if return_outputs else loss
 
+    @torch.no_grad()
     def prediction_step(self, model, inputs, *args, **kwargs):
         eval_loss = self.compute_loss(model, inputs, return_outputs=False)
         return eval_loss, None, None
@@ -1542,7 +1543,6 @@ class AnglE(AngleBase):
                 logging_steps=logging_steps,
                 save_strategy=save_strategy,
                 evaluation_strategy=evaluation_strategy,
-                prediction_loss_only=True,
                 eval_steps=eval_steps,
                 save_steps=save_steps,
                 output_dir=output_dir,
