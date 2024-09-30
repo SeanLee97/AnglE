@@ -93,10 +93,10 @@ parser.add_argument('--epochs', type=int, default=10, help='Specify epochs, defa
 parser.add_argument('--max_steps', type=int, default=-1,
                     help='Specify max steps, default -1 (Automatically calculated from epochs)')
 parser.add_argument('--save_steps', type=int, default=100, help='Specify save_steps, default 1000')
-parser.add_argument('--save_strategy', type=str, default='steps', choices=['steps', 'epoch'],
+parser.add_argument('--save_strategy', type=str, default='steps', choices=['steps', 'epoch', 'no'],
                     help='Specify save_strategy, default steps')
 parser.add_argument('--eval_steps', type=int, default=1000, help='Specify eval_steps, default 1000')
-parser.add_argument('--evaluation_strategy', type=str, default='steps', choices=['steps', 'epoch'],
+parser.add_argument('--evaluation_strategy', type=str, default='steps', choices=['steps', 'epoch', 'no'],
                     help='Specify evaluation_strategy, default steps')
 parser.add_argument('--batch_size', type=int, default=32, help='Specify batch size, default 32')
 parser.add_argument('--maxlen', type=int, default=512, help='Specify max length, default 512')
