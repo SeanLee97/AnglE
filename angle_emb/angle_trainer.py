@@ -35,11 +35,20 @@ parser.add_argument('--valid_subset_name', type=str, default=None,
                     help='Specify huggingface datasets subset name for valid set, default None')
 parser.add_argument('--valid_split_name', type=str, default='train',
                     help='Specify huggingface datasets split name for valid set, default `train`')
+parser.add_argument('--valid_name_or_path_for_callback', type=str, default=None,
+                    help='Specify huggingface datasets name or local file path for callback valid set. '
+                         'The dataset format should be `DatasetFormats.A`. Default None.')
+parser.add_argument('--valid_subset_name_for_callback', type=str, default=None,
+                    help='Specify huggingface datasets subset name for valid set for callback use, default None')
+parser.add_argument('--valid_split_name_for_callback', type=str, default='train',
+                    help='Specify huggingface datasets split name for valid set for callback use, default `train`')
 parser.add_argument('--prompt_template', type=str, default=None,
                     help='Specify prompt_template like "xxx: {text}", default None.'
                          'This prompt will be applied for all text columns.'
                          'If you want to specify different prompts for different text columns,'
                          'please handle it in the preprocessing step.')
+parser.add_argument('--filter_duplicate', type=int, default=1, choices=[0, 1],
+                    help='Specify filter_duplicate, choices [0, 1], defaut 1')
 parser.add_argument('--save_dir', type=str, default=None,
                     help='Specify save dir, default None')
 parser.add_argument('--seed', type=int, default=-1,
@@ -84,6 +93,11 @@ parser.add_argument('--epochs', type=int, default=10, help='Specify epochs, defa
 parser.add_argument('--max_steps', type=int, default=-1,
                     help='Specify max steps, default -1 (Automatically calculated from epochs)')
 parser.add_argument('--save_steps', type=int, default=100, help='Specify save_steps, default 1000')
+parser.add_argument('--save_strategy', type=str, default='steps', choices=['steps', 'epoch'],
+                    help='Specify save_strategy, default steps')
+parser.add_argument('--eval_steps', type=int, default=1000, help='Specify eval_steps, default 1000')
+parser.add_argument('--evaluation_strategy', type=str, default='steps', choices=['steps', 'epoch'],
+                    help='Specify evaluation_strategy, default steps')
 parser.add_argument('--batch_size', type=int, default=32, help='Specify batch size, default 32')
 parser.add_argument('--maxlen', type=int, default=512, help='Specify max length, default 512')
 parser.add_argument('--streaming', action='store_true', default=False,
@@ -227,6 +241,25 @@ def main():
             AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template),
             num_proc=args.workers)
 
+    valid_ds_for_callback = None
+    if valid_ds_for_callback is None and args.valid_name_or_path_for_callback is not None:
+        logger.info('Validation for callback detected, processing validation...')
+        if os.path.exists(args.valid_name_or_path_for_callback):
+            valid_ds_for_callback = load_dataset(
+                'json', data_files=[args.valid_name_or_path_for_callback], num_proc=args.workers)
+        else:
+            if args.valid_subset_name_for_callback is not None:
+                valid_ds_for_callback = load_dataset(
+                    args.valid_name_or_path_for_callback,
+                    args.valid_subset_name_for_callback,
+                    num_proc=args.workers)
+            else:
+                valid_ds_for_callback = load_dataset(
+                    args.valid_name_or_path_for_callback, num_proc=args.workers)
+        valid_ds_for_callback = valid_ds_for_callback[args.valid_split_name_for_callback or 'train'].map(
+            AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template),
+            num_proc=args.workers)
+
     argument_kwargs = {}
     if args.push_to_hub:
         assert args.hub_model_id is not None, 'Please specify hub_mode_id via --hub_model_id xxx'
@@ -254,11 +287,15 @@ def main():
     model.fit(
         train_ds=train_ds,
         valid_ds=valid_ds,
+        valid_ds_for_callback=valid_ds_for_callback,
         output_dir=args.save_dir,
         batch_size=args.batch_size,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         save_steps=args.save_steps,
+        save_strategy=args.save_strategy,
+        eval_steps=args.eval_steps,
+        evaluation_strategy=args.evaluation_strategy,
         warmup_steps=args.warmup_steps,
         logging_steps=args.logging_steps,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
@@ -271,6 +308,7 @@ def main():
             'angle_tau': args.angle_tau,
         },
         fp16=args.fp16,
+        filter_duplicate=args.filter_duplicate,
         argument_kwargs=argument_kwargs,
         apply_ese=args.apply_ese,
         trainer_kwargs=trainer_kwargs,
