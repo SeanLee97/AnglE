@@ -857,7 +857,6 @@ class AngleTrainer(Trainer):
         if mask_target_labels is not None:
             loss += self.compute_mlm_loss(mlm_logits, mask_target_labels)
 
-        inputs['labels'] = None  # avoid evaluation error
         return (loss, outputs) if return_outputs else loss
 
 
@@ -990,7 +989,6 @@ class AngleESETrainer(AngleTrainer):
         if mask_target_labels is not None:
             loss += self.compute_mlm_loss(mlm_logits, mask_target_labels)
 
-        inputs['labels'] = None  # avoid evaluation error
         return (loss, teacher_outputs) if return_outputs else loss
 
 
@@ -1547,7 +1545,6 @@ class AnglE(AngleBase):
                 save_total_limit=save_total_limit,
                 load_best_model_at_end=False,
                 ddp_find_unused_parameters=False if self.gpu_count > 1 else None,
-                label_names=AnglE.special_columns,
                 **argument_kwargs,
             ),
             callbacks=callbacks,
