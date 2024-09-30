@@ -821,7 +821,7 @@ class AngleTrainer(Trainer):
             ignore_index=self.pad_token_id,
         )
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs: bool = False):
         """ Compute loss for AnglE.
 
         :param model: Huggingface model.
@@ -860,11 +860,8 @@ class AngleTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
     def prediction_step(self, model, inputs, *args, **kwargs):
-        kwargs.pop('prediction_loss_only', None)
-        inputs.pop('labels', None)
-        ret = super().prediction_step(model, inputs, prediction_loss_only=False, **kwargs)
-        print(f'eval loss: {ret[0]}')
-        return ret
+        eval_loss = self.compute_loss(model, inputs, return_outputs=False)
+        return eval_loss, None, None
 
 
 class AngleESETrainer(AngleTrainer):
