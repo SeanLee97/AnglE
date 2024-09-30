@@ -1545,6 +1545,7 @@ class AnglE(AngleBase):
                 save_total_limit=save_total_limit,
                 load_best_model_at_end=False,
                 ddp_find_unused_parameters=False if self.gpu_count > 1 else None,
+                remove_unused_columns=False,
                 **argument_kwargs,
             ),
             callbacks=callbacks,
