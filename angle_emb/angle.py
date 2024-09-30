@@ -862,7 +862,7 @@ class AngleTrainer(Trainer):
     def prediction_step(self, model, inputs, *args, **kwargs):
         kwargs.pop('prediction_loss_only', None)
         inputs.pop('labels', None)
-        ret = super().prediction_step(model, inputs, prediction_loss_only=True, **kwargs)
+        ret = super().prediction_step(model, inputs, prediction_loss_only=False, **kwargs)
         print(f'eval loss: {ret[0]}')
         return ret
 
