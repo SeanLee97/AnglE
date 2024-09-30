@@ -36,7 +36,8 @@ parser.add_argument('--valid_subset_name', type=str, default=None,
 parser.add_argument('--valid_split_name', type=str, default='train',
                     help='Specify huggingface datasets split name for valid set, default `train`')
 parser.add_argument('--valid_name_or_path_for_callback', type=str, default=None,
-                    help='Specify huggingface datasets name or local file path for callback valid set, default None.')
+                    help='Specify huggingface datasets name or local file path for callback valid set. '
+                         'The dataset format should be `DatasetFormats.A`. Default None.')
 parser.add_argument('--valid_subset_name_for_callback', type=str, default=None,
                     help='Specify huggingface datasets subset name for valid set for callback use, default None')
 parser.add_argument('--valid_split_name_for_callback', type=str, default='train',

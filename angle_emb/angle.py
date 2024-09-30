@@ -1531,6 +1531,7 @@ class AnglE(AngleBase):
             dataset_format=self.detect_dataset_format(train_ds),
             train_dataset=train_ds,
             eval_dataset=valid_ds,
+            do_eval=valid_ds is not None,
             loss_kwargs=loss_kwargs,
             tokenizer=self.tokenizer,
             args=TrainingArguments(
