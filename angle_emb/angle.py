@@ -861,7 +861,7 @@ class AngleTrainer(Trainer):
 
     def prediction_step(self, model, inputs, *args, **kwargs):
         kwargs.pop('prediction_loss_only', None)
-        inputs['labels'] = None  # avoid evaluation error
+        inputs.pop('labels', None)
         return super().prediction_step(model, inputs, prediction_loss_only=True, **kwargs)
 
 
