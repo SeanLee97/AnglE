@@ -272,8 +272,7 @@ def get_pooling(outputs: torch.Tensor,
         sequence_lengths = -1 if padding_side == 'left' else inputs["attention_mask"].sum(dim=1) - 1
         outputs = outputs[torch.arange(batch_size, device=outputs.device), sequence_lengths]
     elif pooling_strategy == 'avg':
-        outputs = torch.sum(
-            outputs * inputs["attention_mask"][:, :, None], dim=1) / torch.sum(inputs["attention_mask"])
+        outputs = torch.sum(outputs * inputs["attention_mask"][:, :, None], dim=1) / inputs["attention_mask"].sum(dim=1).unsqueeze(1)
     elif pooling_strategy == 'max':
         outputs, _ = torch.max(outputs * inputs["attention_mask"][:, :, None], dim=1)
     elif pooling_strategy == 'all':
