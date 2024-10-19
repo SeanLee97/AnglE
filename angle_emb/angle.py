@@ -1431,7 +1431,7 @@ class AnglE(AngleBase):
             evaluation_strategy: str = 'steps',
             save_steps: int = 100,
             save_strategy: str = 'steps',
-            save_total_limit: int = 10,
+            save_total_limit: int = 1,
             gradient_accumulation_steps: int = 1,
             fp16: Optional[bool] = None,
             argument_kwargs: Optional[Dict] = None,

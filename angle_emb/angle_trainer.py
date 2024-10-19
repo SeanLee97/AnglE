@@ -93,6 +93,7 @@ parser.add_argument('--epochs', type=int, default=10, help='Specify epochs, defa
 parser.add_argument('--max_steps', type=int, default=-1,
                     help='Specify max steps, default -1 (Automatically calculated from epochs)')
 parser.add_argument('--save_steps', type=int, default=100, help='Specify save_steps, default 1000')
+parser.add_argument('--save_total_limit', type=int, default=1, help='Specify save_total_limit, default 1')
 parser.add_argument('--save_strategy', type=str, default='steps', choices=['steps', 'epoch', 'no'],
                     help='Specify save_strategy, default steps')
 parser.add_argument('--eval_steps', type=int, default=1000, help='Specify eval_steps, default 1000')
@@ -294,6 +295,7 @@ def main():
         learning_rate=args.learning_rate,
         save_steps=args.save_steps,
         save_strategy=args.save_strategy,
+        save_total_limit=args.save_total_limit,
         eval_steps=args.eval_steps,
         evaluation_strategy=args.evaluation_strategy,
         warmup_steps=args.warmup_steps,
