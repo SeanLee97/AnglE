@@ -393,6 +393,7 @@ class AngleDataTokenizer:
     :param dataset_format: Optional[str]. Specify dataset_format from DatasetFormats. Default None.
         It will automatically detect the dataset format.
     :param end_with_eos: bool. Specify whether ends with the eos token. Default False.
+    :param fix_data: bool. Specify whether fix the data. Only works when prompt_template is not None. Default True.
 
     Example::
 
@@ -415,7 +416,8 @@ class AngleDataTokenizer:
                  template_placeholders: Optional[List[str]] = None,
                  extra_columns: Optional[List[str]] = None,
                  dataset_format: Optional[str] = None,
-                 end_with_eos: bool = False):
+                 end_with_eos: bool = False,
+                 fix_data: bool = True):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.prompt_template = prompt_template
@@ -423,6 +425,7 @@ class AngleDataTokenizer:
         self.extra_columns = extra_columns
         self.dataset_format = dataset_format
         self.end_with_eos = end_with_eos
+        self.fix_data = fix_data
         if template_placeholders is None:
             template_placeholders = ['condition', 'text']
         if prompt_template is not None:
@@ -492,7 +495,7 @@ class AngleDataTokenizer:
         for text_column in text_columns:
             toks.append(self.tokenizer(data[text_column], max_length=self.max_length, truncation=True))
 
-        if self.prompt_template_tok is not None:
+        if self.prompt_template_tok is not None and self.fix_data:
             for tok in toks:
                 if tok['input_ids'][-1] != self.prompt_template_tok['input_ids'][-1]:
                     logger.info(f"data data: token ids={tok['input_ids']}, prompt_token_ids={self.prompt_template_tok['input_ids']}")  # NOQA

@@ -47,6 +47,8 @@ parser.add_argument('--prompt_template', type=str, default=None,
                          'This prompt will be applied for all text columns.'
                          'If you want to specify different prompts for different text columns,'
                          'please handle it in the preprocessing step.')
+parser.add_argument('--fix_data', type=int, default=1, choices=[0, 1],
+                    help='Whether fix data (only works when prompt_template is not None), choices [0, 1], defaut 1')
 parser.add_argument('--filter_duplicate', type=int, default=1, choices=[0, 1],
                     help='Specify filter_duplicate, choices [0, 1], defaut 1')
 parser.add_argument('--save_dir', type=str, default=None,
@@ -221,11 +223,15 @@ def main():
     logger.info('Processing train...')
     if args.streaming:
         train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
-            AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template),
+            AngleDataTokenizer(model.tokenizer, model.max_length,
+                               prompt_template=args.prompt_template,
+                               fix_data=args.fix_data),
             num_proc=args.workers)
     else:
         train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
-            AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template),
+            AngleDataTokenizer(model.tokenizer, model.max_length,
+                               prompt_template=args.prompt_template,
+                               fix_data=args.fix_data),
             num_proc=args.workers)
 
     valid_ds = None
@@ -239,7 +245,9 @@ def main():
             else:
                 valid_ds = load_dataset(args.valid_name_or_path, num_proc=args.workers)
         valid_ds = valid_ds[args.valid_split_name or 'train'].map(
-            AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template),
+            AngleDataTokenizer(model.tokenizer, model.max_length,
+                               prompt_template=args.prompt_template,
+                               fix_data=args.fix_data),
             num_proc=args.workers)
 
     valid_ds_for_callback = None
@@ -258,7 +266,9 @@ def main():
                 valid_ds_for_callback = load_dataset(
                     args.valid_name_or_path_for_callback, num_proc=args.workers)
         valid_ds_for_callback = valid_ds_for_callback[args.valid_split_name_for_callback or 'train'].map(
-            AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt_template),
+            AngleDataTokenizer(model.tokenizer, model.max_length,
+                               prompt_template=args.prompt_template,
+                               fix_data=args.fix_data),
             num_proc=args.workers)
 
     argument_kwargs = {}
