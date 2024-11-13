@@ -827,7 +827,7 @@ class AngleTrainer(Trainer):
             ignore_index=self.pad_token_id,
         )
 
-    def compute_loss(self, model, inputs, return_outputs: bool = False):
+    def compute_loss(self, model, inputs, return_outputs: bool = False, **kwargs):
         """ Compute loss for AnglE.
 
         :param model: Huggingface model.
@@ -942,7 +942,7 @@ class AngleESETrainer(AngleTrainer):
                 ) / division
         return (loss + compression_loss) / (self.n_layers - 1)
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         """ Compute loss for Espresso.
 
         :param model: Huggingface model.
