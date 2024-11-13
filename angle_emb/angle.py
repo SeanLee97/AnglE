@@ -1431,7 +1431,7 @@ class AnglE(AngleBase):
             warmup_steps: int = 1000,
             logging_steps: int = 10,
             eval_steps: int = 1000,
-            evaluation_strategy: str = 'steps',
+            eval_strategy: str = 'steps',
             save_steps: int = 100,
             save_strategy: str = 'steps',
             save_total_limit: int = 1,
@@ -1462,7 +1462,7 @@ class AnglE(AngleBase):
         :param warmup_steps: int. Default 1000.
         :param logging_steps: int. Default 10.
         :param eval_steps: int. Default 1000.
-        :param evaluation_strategy: str. Default 'steps'.
+        :param eval_strategy: str. Default 'steps'.
         :param save_steps: int. Default 100.
         :param save_strategy: str. Default steps.
         :param save_total_limit: int. Default 10.
@@ -1549,7 +1549,7 @@ class AnglE(AngleBase):
                 logging_steps=logging_steps,
                 save_steps=save_steps,
                 save_strategy=save_strategy,
-                evaluation_strategy=evaluation_strategy if valid_ds is not None else 'no',
+                eval_strategy=eval_strategy if valid_ds is not None else 'no',
                 eval_steps=eval_steps,
                 output_dir=output_dir,
                 save_total_limit=save_total_limit,
