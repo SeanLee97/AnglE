@@ -99,8 +99,8 @@ parser.add_argument('--save_total_limit', type=int, default=1, help='Specify sav
 parser.add_argument('--save_strategy', type=str, default='steps', choices=['steps', 'epoch', 'no'],
                     help='Specify save_strategy, default steps')
 parser.add_argument('--eval_steps', type=int, default=1000, help='Specify eval_steps, default 1000')
-parser.add_argument('--evaluation_strategy', type=str, default='steps', choices=['steps', 'epoch', 'no'],
-                    help='Specify evaluation_strategy, default steps')
+parser.add_argument('--eval_strategy', type=str, default='steps', choices=['steps', 'epoch', 'no'],
+                    help='Specify eval_strategy, default steps')
 parser.add_argument('--batch_size', type=int, default=32, help='Specify batch size, default 32')
 parser.add_argument('--maxlen', type=int, default=512, help='Specify max length, default 512')
 parser.add_argument('--streaming', action='store_true', default=False,
@@ -307,7 +307,7 @@ def main():
         save_strategy=args.save_strategy,
         save_total_limit=args.save_total_limit,
         eval_steps=args.eval_steps,
-        evaluation_strategy=args.evaluation_strategy,
+        eval_strategy=args.eval_strategy,
         warmup_steps=args.warmup_steps,
         logging_steps=args.logging_steps,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
