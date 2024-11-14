@@ -78,6 +78,35 @@ You can train a powerful sentence embedding model using the `angle-trainer` cli 
 
         BiLLM_START_INDEX=0 WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=2345 -m angle_emb.angle_trainer \
         --train_name_or_path SeanLee97/all_nli_angle_format_b \
+        --save_dir ckpts/llama7b-nli \
+        --model_name_or_path NousResearch/Llama-2-7b-chat-hf \
+        --pooling_strategy avg \
+        --maxlen 60 \
+        --ibn_w 20.0 \
+        --cosine_w 0.0 \
+        --angle_w 1.0 \
+        --learning_rate 2e-4 \
+        --prompt_template "Represent the following sentence for semantic textual similarity: {text} <|endoftext|>" \
+        --apply_lora 1 --lora_r 64 --lora_alpha 128 --lora_dropout 0.1 \
+        --load_kbit 4 \
+        --is_llm 1 \
+        --push_to_hub 1 --hub_model_id SeanLee97/test-llama7b-nli --hub_private_repo 1 \
+        --logging_steps 5 \
+        --save_steps 50 \
+        --warmup_steps 50 \
+        --batch_size 120 \
+        --gradient_accumulation_steps 32 \
+        --epochs 2 \
+        --fp16 1
+
+
+
+    c. BiLLaMA-based
+
+    .. code-block:: bash
+
+        BiLLM_START_INDEX=0 WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=2345 -m angle_emb.angle_trainer \
+        --train_name_or_path SeanLee97/all_nli_angle_format_b \
         --save_dir ckpts/billm-llama7b-nli \
         --model_name_or_path NousResearch/Llama-2-7b-chat-hf \
         --pooling_strategy avg \
@@ -91,6 +120,7 @@ You can train a powerful sentence embedding model using the `angle-trainer` cli 
         --is_llm 1 \
         --apply_billm 1 \
         --billm_model_class LlamaForCausalLM \
+        --prompt_template "Represent the following sentence for semantic textual similarity: {text} <|endoftext|>" \
         --push_to_hub 1 --hub_model_id SeanLee97/test-billm-llama7b-nli --hub_private_repo 1 \
         --logging_steps 5 \
         --save_steps 50 \
