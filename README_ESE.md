@@ -40,10 +40,10 @@ WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --m
 # Citation
 
 ```bibtex
-@article{li2024ese,
-    title={ESE: Espresso Sentence Embeddings},
-    author={Li, Xianming and Li, Zongxi and Li, Jing and Xie, Haoran and Li, Qing},
-    journal={arXiv preprint arXiv:2402.14776},
-    year={2024}
+article{li2024ese,
+  title={Ese: Espresso sentence embeddings},
+  author={Li, Xianming and Li, Zongxi and Li, Jing and Xie, Haoran and Li, Qing},
+  journal={Preprint},
+  year={2024}
 }
 ```
