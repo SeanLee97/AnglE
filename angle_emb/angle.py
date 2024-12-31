@@ -788,7 +788,8 @@ class AngleTrainer(Trainer):
             teacher_backbone = AutoModel.from_pretrained(
                 teacher_name_or_path,
                 trust_remote_code=True,
-                torch_dtype=self.pooler.model.dtype).to(self.pooler.model.device)
+                torch_dtype=self.pooler.model.dtype,
+                **self.pooler.model.model_kwargs).to(self.pooler.model.device)
 
             self.teacher_pooler = Pooler(
                 teacher_backbone,
@@ -1180,6 +1181,8 @@ class AnglE(AngleBase):
         if torch_dtype is None:
             torch_dtype = torch.float32 if train_mode else None
 
+        self.model_kwargs = model_kwargs if model_kwargs is not None else {}
+
         lora_config = None
         if self.apply_lora:
             lora_config = {
@@ -1200,7 +1203,6 @@ class AnglE(AngleBase):
         if self.is_llm and self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token_id = 0
 
-        model_kwargs = model_kwargs if model_kwargs is not None else {}
         kbit_kwargs = kbit_kwargs if kbit_kwargs is not None else {}
         if self.is_llm:
             device_map = "auto"
@@ -1240,13 +1242,15 @@ class AnglE(AngleBase):
                         torch_dtype=torch.float32,
                         device_map=device_map,
                         trust_remote_code=True,
+                        **self.model_kwargs
                     )
                 else:
                     model = MODEL_CLASS.from_pretrained(model_name_or_path,
                                                         device_map=device_map,
                                                         output_hidden_states=True,
                                                         trust_remote_code=True,
-                                                        torch_dtype=torch_dtype or torch.float16)
+                                                        torch_dtype=torch_dtype or torch.float16,
+                                                        **self.model_kwargs)
                 if train_mode and is_kbit:
                     model = prepare_model_for_kbit_training(model, **kbit_kwargs)
 
@@ -1277,13 +1281,17 @@ class AnglE(AngleBase):
                                                     device_map=device_map,
                                                     output_hidden_states=True,
                                                     trust_remote_code=True,
-                                                    torch_dtype=torch_dtype or torch.float16)
+                                                    torch_dtype=torch_dtype or torch.float16,
+                                                    **self.model_kwargs)
                 self.backbone = model
         else:
             MODEL_CLASS = AutoModelForMaskedLM if load_mlm_model else AutoModel
             # non-LLMs
             if self.apply_lora:
-                model = MODEL_CLASS.from_pretrained(pretrained_model_path or model_name_or_path, trust_remote_code=True)
+                model = MODEL_CLASS.from_pretrained(
+                    pretrained_model_path or model_name_or_path,
+                    trust_remote_code=True,
+                    **self.model_kwargs)
                 if pretrained_lora_path is not None:
                     model = PeftModel.from_pretrained(
                         model,
@@ -1303,7 +1311,8 @@ class AnglE(AngleBase):
                     logger.info(f'Load pretrained model from {pretrained_model_path}')
                 self.backbone = MODEL_CLASS.from_pretrained(
                     pretrained_model_path or model_name_or_path,
-                    trust_remote_code=True)
+                    trust_remote_code=True,
+                    **self.model_kwargs)
 
         if train_mode and self.apply_lora:
             self.backbone.print_trainable_parameters()
@@ -1374,6 +1383,7 @@ class AnglE(AngleBase):
                         is_llm: Optional[bool] = None,
                         pooling_strategy: str = 'cls',
                         train_mode: bool = False,
+                        model_kwargs: Optional[Dict] = None,
                         **kwargs):
         """
         Load AnglE from pretrained model.
@@ -1398,6 +1408,7 @@ class AnglE(AngleBase):
                 # inference
                 angle.encode(*args, **kwargs)
         """
+        kwargs['model_kwargs'] = model_kwargs
         angle = AnglE(model_name_or_path,
                       is_llm=is_llm,
                       pretrained_model_path=pretrained_model_path,
