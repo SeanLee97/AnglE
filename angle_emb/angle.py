@@ -392,7 +392,6 @@ class AngleDataTokenizer:
         If providing multiple placeholders in prompt_template, specify their name via extra_columns. Default None
     :param dataset_format: Optional[str]. Specify dataset_format from DatasetFormats. Default None.
         It will automatically detect the dataset format.
-    :param end_with_eos: bool. Specify whether ends with the eos token. Default False.
     :param fix_data: bool. Specify whether fix the data. Only works when prompt_template is not None. Default True.
 
     Example::
@@ -416,7 +415,6 @@ class AngleDataTokenizer:
                  template_placeholders: Optional[List[str]] = None,
                  extra_columns: Optional[List[str]] = None,
                  dataset_format: Optional[str] = None,
-                 end_with_eos: bool = False,
                  fix_data: bool = True):
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -424,7 +422,6 @@ class AngleDataTokenizer:
         self.prompt_template_tok = None
         self.extra_columns = extra_columns
         self.dataset_format = dataset_format
-        self.end_with_eos = end_with_eos
         self.fix_data = fix_data
         if template_placeholders is None:
             template_placeholders = ['condition', 'text']
@@ -478,8 +475,6 @@ class AngleDataTokenizer:
                     continue
                 extra_placeholder[key] = val
                 extra_length += len(self.tokenizer(val, add_special_tokens=False)['input_ids'])
-        if self.end_with_eos:
-            extra_length += 1
 
         if self.prompt_template_tok is not None:
             max_length = self.max_length - len(self.prompt_template_tok['input_ids']) - extra_length
@@ -523,7 +518,6 @@ class AngleDataTokenizer:
         combined_tok['seperate_ids'] = seperate_ids
         combined_tok['extra'] = {
             'dataset_format': self.dataset_format,
-            'end_with_eos': self.end_with_eos,
             'prompt_token_ids': self.prompt_template_tok['input_ids'] if self.prompt_template_tok is not None else None,
         }
         return combined_tok
@@ -551,7 +545,7 @@ class AngleDataCollator:
     filter_duplicate: bool = True
     coword_random_mask_rate: float = 0.0
     special_token_id_names: List[str] = field(default_factory=lambda: [
-        'bos_token_id', 'eos_token_id', 'unk_token_id', 'sep_token_id',
+        'bos_token_id', 'unk_token_id', 'sep_token_id',
         'pad_token_id', 'cls_token_id', 'mask_token_id'])
 
     def __call__(self, features: List[Dict], return_tensors: str = "pt") -> Dict[str, torch.Tensor]:
@@ -564,7 +558,6 @@ class AngleDataCollator:
         if return_tensors is None:
             return_tensors = self.return_tensors
         has_token_type_ids = "token_type_ids" in features[0]
-        end_with_eos = features[0]['extra']['end_with_eos']
         prompt_token_ids = set(features[0]['extra']['prompt_token_ids'] or [])
         special_token_ids = set()
         for name in self.special_token_id_names:
@@ -661,22 +654,13 @@ class AngleDataCollator:
         # remove features
         del features
 
-        if end_with_eos:
-            features = {}
-            features['input_ids'] = [feature['input_ids'] + [self.tokenizer.eos_token_id] for feature in new_features]
-            features = self.tokenizer.pad(
-                features,
-                padding=self.padding,
-                return_attention_mask=True,
-                return_tensors=return_tensors)
-        else:
-            features = self.tokenizer.pad(
-                {'input_ids': [feature['input_ids'] for feature in new_features]},
-                padding=self.padding,
-                max_length=self.max_length,
-                return_attention_mask=True,
-                return_tensors=return_tensors,
-            )
+        features = self.tokenizer.pad(
+            {'input_ids': [feature['input_ids'] for feature in new_features]},
+            padding=self.padding,
+            max_length=self.max_length,
+            return_attention_mask=True,
+            return_tensors=return_tensors,
+        )
         features['labels'] = torch.Tensor([feature['labels'] for feature in new_features])
 
         if self.coword_random_mask_rate > 0:
@@ -1618,7 +1602,6 @@ class AnglE(AngleBase):
     def encode(self,
                inputs: Union[List[str], Tuple[str], List[Dict], str],
                max_length: Optional[int] = None,
-               end_with_eos: bool = False,
                to_numpy: bool = True,
                embedding_start: int = 0,
                embedding_size: Optional[int] = None,
@@ -1651,25 +1634,13 @@ class AnglE(AngleBase):
                 assert isinstance(obj, dict), 'The prompt has been set, please pass a dict like {"prompt_key": "text"}'
                 inputs[i] = prompt.format(**obj)
         max_length = max_length or self.max_length
-        if end_with_eos:
-            max_length -= 1
 
-        if end_with_eos:
-            tok = self.tokenizer(
-                inputs,
-                padding=False,
-                return_attention_mask=False,
-                max_length=max_length or self.max_length,
-                truncation=True)
-            tok['input_ids'] = [input_ids + [self.tokenizer.eos_token_id] for input_ids in tok['input_ids']]
-            tok = self.tokenizer.pad(tok, padding=padding, return_attention_mask=True, return_tensors='pt')
-        else:
-            tok = self.tokenizer(
-                inputs,
-                padding=padding,
-                max_length=max_length or self.max_length,
-                truncation=True,
-                return_tensors='pt')
+        tok = self.tokenizer(
+            inputs,
+            padding=padding,
+            max_length=max_length or self.max_length,
+            truncation=True,
+            return_tensors='pt')
         tok.to(device)
         with torch.no_grad():
             output = self.pooler(tok,
