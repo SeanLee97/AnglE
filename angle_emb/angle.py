@@ -263,7 +263,7 @@ def get_pooling(outputs: torch.Tensor,
         outputs = outputs[:, 0]
     elif pooling_strategy == 'cls_avg':
         avg = torch.sum(
-            outputs * inputs["attention_mask"][:, :, None], dim=1) / torch.sum(inputs["attention_mask"])
+            outputs * inputs["attention_mask"][:, :, None], dim=1) / inputs["attention_mask"].sum(dim=1).unsqueeze(1)
         outputs = (outputs[:, 0] + avg) / 2.0
     elif pooling_strategy == 'cls_max':
         maximum, _ = torch.max(outputs * inputs["attention_mask"][:, :, None], dim=1)
@@ -715,7 +715,10 @@ class Pooler:
         all_layer_outputs = ret.hidden_states
         if return_all_layer_outputs:
             return (all_layer_outputs, ret.logits) if return_mlm_logits else all_layer_outputs
-        outputs = all_layer_outputs[layer_index]
+        if layer_index == -1:
+            outputs = ret.last_hidden_state
+        else:
+            outputs = all_layer_outputs[layer_index]
         outputs = get_pooling(outputs, inputs,
                               pooling_strategy or self.pooling_strategy,
                               padding_side=self.padding_side)
@@ -1633,7 +1636,6 @@ class AnglE(AngleBase):
             for i, obj in enumerate(inputs):
                 assert isinstance(obj, dict), 'The prompt has been set, please pass a dict like {"prompt_key": "text"}'
                 inputs[i] = prompt.format(**obj)
-        max_length = max_length or self.max_length
 
         tok = self.tokenizer(
             inputs,
