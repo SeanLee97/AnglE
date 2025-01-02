@@ -758,10 +758,12 @@ class AngleTrainer(Trainer):
                  teacher_name_or_path: Optional[str] = None,
                  teacher_pooling_strategy: str = 'cls',
                  pad_token_id: int = 0,
+                 model_kwargs: Optional[Dict] = None,
                  **kwargs):
         super().__init__(**kwargs)
         self.pooler = pooler
         self.pad_token_id = pad_token_id
+        self.model_kwargs = model_kwargs
         if loss_kwargs is None:
             loss_kwargs = {}
         self.loss_fct = AngleLoss(dataset_format=dataset_format, **loss_kwargs)
@@ -776,7 +778,7 @@ class AngleTrainer(Trainer):
                 teacher_name_or_path,
                 trust_remote_code=True,
                 torch_dtype=self.pooler.model.dtype,
-                **self.pooler.model.model_kwargs).to(self.pooler.model.device)
+                **self.model_kwargs).to(self.pooler.model.device)
 
             self.teacher_pooler = Pooler(
                 teacher_backbone,
@@ -1565,6 +1567,7 @@ class AnglE(AngleBase):
                 filter_duplicate=filter_duplicate,
                 coword_random_mask_rate=coword_random_mask_rate,
             ),
+            model_kwargs=self.model_kwargs,
             **trainer_kwargs
         )
         if torch.__version__ >= "2" and sys.platform != "win32":
