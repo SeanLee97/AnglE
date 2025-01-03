@@ -711,13 +711,14 @@ class Pooler:
             Currently support [`cls`, `cls_avg`, `cls_max`, `last`, `avg`, `mean`, `max`, `all`, int]. Default None.
         :param return_mlm_logits: bool. Return logits or not. Default False.
         """
-        ret = self.model(output_hidden_states=True, return_dict=True, **inputs)
-        all_layer_outputs = ret.hidden_states
-        if return_all_layer_outputs:
-            return (all_layer_outputs, ret.logits) if return_mlm_logits else all_layer_outputs
-        if layer_index == -1:
+        if layer_index == -1 and not return_all_layer_outputs:
+            ret = self.model(**inputs)
             outputs = ret.last_hidden_state
         else:
+            ret = self.model(output_hidden_states=True, return_dict=True, **inputs)
+            all_layer_outputs = ret.hidden_states
+            if return_all_layer_outputs:
+                return (all_layer_outputs, ret.logits) if return_mlm_logits else all_layer_outputs
             outputs = all_layer_outputs[layer_index]
         outputs = get_pooling(outputs, inputs,
                               pooling_strategy or self.pooling_strategy,
