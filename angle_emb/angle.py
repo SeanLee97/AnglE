@@ -999,29 +999,29 @@ class AngleLoss:
     Configure AngleLoss.
 
     :param cosine_w: float. weight for cosine_loss. Default 1.0
-    :param ibn_w: float. weight for contrastive loss. Default 1.0
+    :param ibn_w: float. weight for in batch negative loss. Default 1.0
+    :param cln_w: float. weight for contrastive learning with hard negative. Default 1.0
     :param angle_w: float. weight for angle loss. Default 1.0
     :param cosine_tau: float. tau for cosine loss. Default 20.0
-    :param ibn_tau: float. tau for contrastive loss. Default 20.0
+    :param ibn_tau: float. tau for in batch negative loss. Default 20.0
     :param angle_tau: float. tau for angle loss. Default 20.0
     :param angle_pooling_strategy: str. pooling strategy for angle loss. Default'sum'.
     :param dataset_format: Optional[str]. Default None.
     """
     def __init__(self,
                  cosine_w: float = 0.0,
-                 ibn_w: float = 20.0,
-                 angle_w: float = 1.0,
+                 ibn_w: float = 1.0,
+                 cln_w: float = 1.0,
+                 angle_w: float = 0.02,
                  cosine_tau: float = 20.0,
                  ibn_tau: float = 20.0,
                  angle_tau: float = 20.0,
                  angle_pooling_strategy: str = 'sum',
                  dataset_format: Optional[str] = None,
                  **kwargs):
-        if 'w1' in kwargs or 'w2' in kwargs or 'w3' in kwargs:
-            assert ('w1, w2, and w3 has been renamed to cosine_w, ibn_w, and angle_w, respecitvely.'
-                    'Please use new names instead.')
         self.cosine_w = cosine_w
         self.ibn_w = ibn_w
+        self.cln_w = cln_w
         self.angle_w = angle_w
         self.cosine_tau = cosine_tau
         self.ibn_tau = ibn_tau
@@ -1049,6 +1049,9 @@ class AngleLoss:
                 loss += self.angle_w * angle_loss(labels, outputs, self.angle_tau,
                                                   pooling_strategy=self.angle_pooling_strategy)
         elif self.dataset_format == DatasetFormats.B:
+            if int(self.cln_w) == 0:
+                logger.info('`cln_w` is set to zero. Contrastive learning with hard negative is disabled. '
+                            'Please manually check whether it is correct.')
             # text,positive,negative
             text = outputs[::3]
             positive = outputs[1::3]
@@ -1064,13 +1067,22 @@ class AngleLoss:
             combined_labels = torch.cat((positive_labels, negative_labels), dim=0)
 
             loss = 0.
-            if self.cosine_w > 0:
-                loss += self.cosine_w * cosine_loss(combined_labels, combined_inputs, self.cosine_tau)
+            # contrastive learning loss
+            cll = 0.
             if self.ibn_w > 0:
-                loss += self.ibn_w * contrastive_with_negative_loss(text, positive, negative, tau=self.ibn_tau)
+                cll += self.ibn_w * contrastive_with_negative_loss(text, positive, tau=self.ibn_tau)
+            if self.cln_w > 0:
+                cll += self.cln_w * contrastive_with_negative_loss(text, positive, negative, tau=self.ibn_tau)
+            if cll > 0:
+                loss += cll / 2
+            # angle loss
             if self.angle_w > 0:
                 loss += self.angle_w * angle_loss(combined_labels, combined_inputs, self.angle_tau,
                                                   pooling_strategy=self.angle_pooling_strategy)
+            # cosine loss
+            if self.cosine_w > 0:
+                loss += self.cosine_w * cosine_loss(combined_labels, combined_inputs, self.cosine_tau)
+
         elif self.dataset_format == DatasetFormats.C:
             text = outputs[::2]
             positive = outputs[1::2]

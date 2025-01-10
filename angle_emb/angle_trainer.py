@@ -61,10 +61,12 @@ parser.add_argument('--workers', type=int, default=2,
                     help='Specify dataset workers, default 2')
 parser.add_argument('--cosine_w', type=float, default=0.0,
                     help='Specify weight for cosine loss, default 0.0')
-parser.add_argument('--ibn_w', type=float, default=30.0,
-                    help='Specify weight for ibn loss, default 30.0')
-parser.add_argument('--angle_w', type=float, default=1.0,
-                    help='Specify weight for angle loss, default 1.0')
+parser.add_argument('--ibn_w', type=float, default=1.0,
+                    help='Specify weight for in-batch negative loss, default 1.0')
+parser.add_argument('--cln_w', type=float, default=1.0,
+                    help='Specify weight for contrastive learning with hard negative loss, default 1.0')
+parser.add_argument('--angle_w', type=float, default=0.02,
+                    help='Specify weight for angle loss, default 0.02')
 parser.add_argument('--angle_tau', type=float, default=20.0,
                     help='Specify angle_tau, default 20.0')
 parser.add_argument('--cosine_tau', type=float, default=20.0,
@@ -323,6 +325,7 @@ def main():
         loss_kwargs={
             'cosine_w': args.cosine_w,
             'ibn_w': args.ibn_w,
+            'cln_w': args.cln_w,
             'angle_w': args.angle_w,
             'cosine_tau': args.cosine_tau,
             'ibn_tau': args.ibn_tau,
