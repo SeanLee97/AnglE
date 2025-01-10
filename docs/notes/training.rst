@@ -200,12 +200,20 @@ You can also train a sentence embedding model using the `angle_emb` library. Her
 -------------------------
 
 1. `angle_w`: the weight for angle loss. Default `0.02`
+
 2. `ibn_w`: the weight for in-batch negative loss. Default `1.0`
+
 3. `cln_w`: the weight for contrastive learning with hard negative loss. Default `1.0`
+
 4. `cosine_w`: the weight for cosine loss. Default `0.0`
+
 5. `angle_tau`: the temperature for angle loss. Default `20.0`
+
 6. `ibn_tau`: the temperature for ibn and cln losses. Default `20.0`
+
 7. `cosine_tau`: the temperature for cosine loss. Default `20.0`
+
+
 
 
 💡 Fine-tuning Tips
