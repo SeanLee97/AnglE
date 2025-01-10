@@ -55,9 +55,10 @@ You can train a powerful sentence embedding model using the `angle-trainer` cli 
         --model_name_or_path google-bert/bert-base-uncased \
         --pooling_strategy cls \
         --maxlen 128 \
-        --ibn_w 30.0 \
+        --ibn_w 1.0 \
+        --cln_w 1.0 \
         --cosine_w 0.0 \
-        --angle_w 1.0 \
+        --angle_w 0.02 \
         --angle_tau 20.0 \
         --learning_rate 5e-5 \
         --push_to_hub 1 --hub_model_id SeanLee97/bert-base-nli-test-0728 --hub_private_repo 1 \
@@ -82,13 +83,14 @@ You can train a powerful sentence embedding model using the `angle-trainer` cli 
         --model_name_or_path NousResearch/Llama-2-7b-chat-hf \
         --pooling_strategy avg \
         --maxlen 60 \
-        --ibn_w 20.0 \
+        --ibn_w 1.0 \
+        --cln_w 1.0 \
         --cosine_w 0.0 \
-        --angle_w 1.0 \
+        --angle_w 0.02 \
         --learning_rate 2e-4 \
-        --prompt_template "Represent the following sentence for semantic textual similarity: {text} <|endoftext|>" \
+        --prompt_template "Represent the following sentence for semantic textual similarity: {text}" \
         --apply_lora 1 --lora_r 64 --lora_alpha 128 --lora_dropout 0.1 \
-        --load_kbit 4 \
+        --load_kbit 16 \
         --is_llm 1 \
         --push_to_hub 1 --hub_model_id SeanLee97/test-llama7b-nli --hub_private_repo 1 \
         --logging_steps 5 \
@@ -111,16 +113,17 @@ You can train a powerful sentence embedding model using the `angle-trainer` cli 
         --model_name_or_path NousResearch/Llama-2-7b-chat-hf \
         --pooling_strategy avg \
         --maxlen 60 \
-        --ibn_w 20.0 \
+        --ibn_w 1.0 \
+        --cln_w 1.0 \
         --cosine_w 0.0 \
-        --angle_w 1.0 \
+        --angle_w 0.02 \
         --learning_rate 2e-4 \
         --apply_lora 1 --lora_r 64 --lora_alpha 128 --lora_dropout 0.1 \
-        --load_kbit 4 \
+        --load_kbit 16 \
         --is_llm 1 \
         --apply_billm 1 \
         --billm_model_class LlamaForCausalLM \
-        --prompt_template "Represent the following sentence for semantic textual similarity: {text} <|endoftext|>" \
+        --prompt_template "Represent the following sentence for semantic textual similarity: {text}" \
         --push_to_hub 1 --hub_model_id SeanLee97/test-billm-llama7b-nli --hub_private_repo 1 \
         --logging_steps 5 \
         --save_steps 50 \
@@ -169,9 +172,10 @@ You can also train a sentence embedding model using the `angle_emb` library. Her
         warmup_steps=0,
         gradient_accumulation_steps=1,
         loss_kwargs={
-            'cosine_w': 1.0,
-            'ibn_w': 20.0,
-            'angle_w': 1.0,
+            'cosine_w': 0.0,
+            'ibn_w': 1.0,
+            'cln_w': 1.0,
+            'angle_w': 0.02,
             'cosine_tau': 20,
             'ibn_tau': 20,
             'angle_tau': 20
@@ -190,12 +194,25 @@ You can also train a sentence embedding model using the `angle_emb` library. Her
     :alt: Open In Colab
 
 
+
+
+💡 Hyperparameters
+-------------------------
+
+1. `angle_w`: the weight for angle loss. Default `0.02`
+2. `ibn_w`: the weight for in-batch negative loss. Default `1.0`
+3. `cln_w`: the weight for contrastive learning with hard negative loss. Default `1.0`
+4. `angle_tau`: the temperature for angle loss. Default `20.0`
+5. `ibn_tau`: the temperature for ibn and cln losses. Default `20.0`
+
+
+
 💡 Fine-tuning Tips
 -------------------------
 
 1. If your dataset format is `DatasetFormats.A`, it is recommended to slightly increase the weight for `cosine_w` or slightly decrease the weight for `ibn_w`.
 
-2. If your dataset format is `DatasetFormats.B`, it is recommended to set `cosine_w` to 0, and increase the weight for `ibn_w` such as 10 and 20. The `angle_tau` is recommended to set to 20.0.
+2. If your dataset format is `DatasetFormats.B`, it is recommended to set `cosine_w` to 0, and set `angle_w` to a small value like 0.02. Be sure to set `cln_w` and `ibn_w`.
 
 3. If your dataset format is `DatasetFormats.C`, only `ibn_w` and `ibn_tau` are effective. You don't need to tune other parameters.
 

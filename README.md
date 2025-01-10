@@ -343,8 +343,9 @@ angle.fit(
     gradient_accumulation_steps=1,
     loss_kwargs={
         'cosine_w': 1.0,
-        'ibn_w': 20.0,
-        'angle_w': 1.0,
+        'ibn_w': 1.0,
+        'cln_w': 1.0,
+        'angle_w': 0.02,
         'cosine_tau': 20,
         'ibn_tau': 20,
         'angle_tau': 20
@@ -368,9 +369,11 @@ print('Spearman\'s corrcoef:', corrcoef)
 
 ## 💡 4. Fine-tuning Tips
 
+For more details, please refer to the [documentation](https://angle.readthedocs.io/en/latest/notes/training.html#fine-tuning-tips).
+
 1️⃣ If your dataset format is `DatasetFormats.A`, it is recommended to slightly increase the weight for `cosine_w` or slightly decrease the weight for `ibn_w`.
 
-2️⃣ If your dataset format is `DatasetFormats.B`, it is recommended to set `cosine_w` to 0, and increase the weight for `ibn_w` such as 10 and 20. The `angle_tau` is recommended to set to 20.0.
+2️⃣ If your dataset format is `DatasetFormats.B`, it is recommended to set `cosine_w` to 0, and set `angle_w` to a small value like 0.02. Be sure to set `cln_w` and `ibn_w`.
 
 3️⃣ If your dataset format is `DatasetFormats.C`, only `ibn_w` and `ibn_tau` are effective. You don't need to tune other parameters.
 
