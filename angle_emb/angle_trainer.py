@@ -6,7 +6,7 @@ import random
 
 import numpy as np
 import torch
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 
 from angle_emb import AnglE, AngleDataTokenizer
 from angle_emb.utils import logger
@@ -61,10 +61,12 @@ parser.add_argument('--workers', type=int, default=2,
                     help='Specify dataset workers, default 2')
 parser.add_argument('--cosine_w', type=float, default=0.0,
                     help='Specify weight for cosine loss, default 0.0')
-parser.add_argument('--ibn_w', type=float, default=30.0,
-                    help='Specify weight for ibn loss, default 30.0')
-parser.add_argument('--angle_w', type=float, default=1.0,
-                    help='Specify weight for angle loss, default 1.0')
+parser.add_argument('--ibn_w', type=float, default=1.0,
+                    help='Specify weight for in-batch negative loss, default 1.0')
+parser.add_argument('--cln_w', type=float, default=1.0,
+                    help='Specify weight for contrastive learning with hard negative loss, default 1.0')
+parser.add_argument('--angle_w', type=float, default=0.02,
+                    help='Specify weight for angle loss, default 0.02')
 parser.add_argument('--angle_tau', type=float, default=20.0,
                     help='Specify angle_tau, default 20.0')
 parser.add_argument('--cosine_tau', type=float, default=20.0,
@@ -208,10 +210,13 @@ def main():
                   load_mlm_model=args.load_mlm_model)
 
     if os.path.exists(args.train_name_or_path):
-        ds = load_dataset('json',
-                          data_files=[args.train_name_or_path],
-                          num_proc=args.workers,
-                          streaming=args.streaming)
+        if os.path.isdir(args.train_name_or_path):
+            ds = load_from_disk(args.train_name_or_path, num_proc=args.workers)
+        else:
+            ds = load_dataset('json',
+                              data_files=[args.train_name_or_path],
+                              num_proc=args.workers,
+                              streaming=args.streaming)
     else:
         ds = load_dataset(args.train_name_or_path,
                           args.train_subset_name,
@@ -238,7 +243,10 @@ def main():
     if valid_ds is None and args.valid_name_or_path is not None:
         logger.info('Validation detected, processing validation...')
         if os.path.exists(args.valid_name_or_path):
-            valid_ds = load_dataset('json', data_files=[args.valid_name_or_path], num_proc=args.workers)
+            if os.path.isdir(args.valid_name_or_path):
+                valid_ds = load_from_disk(args.valid_name_or_path, num_proc=args.workers)
+            else:
+                valid_ds = load_dataset('json', data_files=[args.valid_name_or_path], num_proc=args.workers)
         else:
             if args.valid_subset_name is not None:
                 valid_ds = load_dataset(args.valid_name_or_path, args.valid_subset_name, num_proc=args.workers)
@@ -254,8 +262,11 @@ def main():
     if valid_ds_for_callback is None and args.valid_name_or_path_for_callback is not None:
         logger.info('Validation for callback detected, processing validation...')
         if os.path.exists(args.valid_name_or_path_for_callback):
-            valid_ds_for_callback = load_dataset(
-                'json', data_files=[args.valid_name_or_path_for_callback], num_proc=args.workers)
+            if os.path.isdir(args.valid_name_or_path_for_callback):
+                valid_ds_for_callback = load_from_disk(args.valid_name_or_path_for_callback, num_proc=args.workers)
+            else:
+                valid_ds_for_callback = load_dataset(
+                    'json', data_files=[args.valid_name_or_path_for_callback], num_proc=args.workers)
         else:
             if args.valid_subset_name_for_callback is not None:
                 valid_ds_for_callback = load_dataset(
@@ -314,6 +325,7 @@ def main():
         loss_kwargs={
             'cosine_w': args.cosine_w,
             'ibn_w': args.ibn_w,
+            'cln_w': args.cln_w,
             'angle_w': args.angle_w,
             'cosine_tau': args.cosine_tau,
             'ibn_tau': args.ibn_tau,

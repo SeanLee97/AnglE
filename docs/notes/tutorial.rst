@@ -42,9 +42,10 @@ Here's an example of training a BERT-base model:
     --model_name_or_path microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext \
     --pooling_strategy cls \
     --maxlen 75 \
-    --ibn_w 20.0 \
+    --ibn_w 1.0 \
+    --cln_w 1.0 \
     --cosine_w 0.0 \
-    --angle_w 1.0 \
+    --angle_w 0.02 \
     --learning_rate 1e-6 \
     --logging_steps 5 \
     --save_steps 500 \
@@ -69,9 +70,10 @@ And here's another example of training a BERT-large model:
     --load_mlm_model 1 \
     --pooling_strategy cls \
     --maxlen 75 \
-    --ibn_w 20.0 \
+    --ibn_w 1.0 \
+    --cln_w 1.0 \
     --cosine_w 0.0 \
-    --angle_w 1.0 \
+    --angle_w 0.02 \
     --learning_rate 1e-6 \
     --logging_steps 5 \
     --save_steps 500 \
