@@ -716,7 +716,7 @@ class Pooler:
             outputs = ret.last_hidden_state
         else:
             ret = self.model(output_hidden_states=True, return_dict=True, **inputs)
-            all_layer_outputs = ret.hidden_states
+            all_layer_outputs = list(ret.hidden_states)
             all_layer_outputs[-1] = ret.last_hidden_state
             if return_all_layer_outputs:
                 return (all_layer_outputs, ret.logits) if return_mlm_logits else all_layer_outputs
