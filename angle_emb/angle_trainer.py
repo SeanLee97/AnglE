@@ -211,7 +211,7 @@ def main():
 
     if os.path.exists(args.train_name_or_path):
         if os.path.isdir(args.train_name_or_path):
-            ds = load_from_disk(args.train_name_or_path, num_proc=args.workers)
+            ds = load_from_disk(args.train_name_or_path)
         else:
             ds = load_dataset('json',
                               data_files=[args.train_name_or_path],
@@ -244,7 +244,7 @@ def main():
         logger.info('Validation detected, processing validation...')
         if os.path.exists(args.valid_name_or_path):
             if os.path.isdir(args.valid_name_or_path):
-                valid_ds = load_from_disk(args.valid_name_or_path, num_proc=args.workers)
+                valid_ds = load_from_disk(args.valid_name_or_path)
             else:
                 valid_ds = load_dataset('json', data_files=[args.valid_name_or_path], num_proc=args.workers)
         else:
@@ -263,7 +263,7 @@ def main():
         logger.info('Validation for callback detected, processing validation...')
         if os.path.exists(args.valid_name_or_path_for_callback):
             if os.path.isdir(args.valid_name_or_path_for_callback):
-                valid_ds_for_callback = load_from_disk(args.valid_name_or_path_for_callback, num_proc=args.workers)
+                valid_ds_for_callback = load_from_disk(args.valid_name_or_path_for_callback)
             else:
                 valid_ds_for_callback = load_dataset(
                     'json', data_files=[args.valid_name_or_path_for_callback], num_proc=args.workers)
