@@ -712,12 +712,13 @@ class Pooler:
         :param return_mlm_logits: bool. Return logits or not. Default False.
         """
         if layer_index == -1 and not return_all_layer_outputs:
-            ret = self.model(**inputs)
-            outputs = ret.last_hidden_state
+            ret = self.model(output_hidden_states=True, **inputs)
+            outputs = ret.last_hidden_state if hasattr(ret, 'last_hidden_state') else ret.hidden_states[-1]
         else:
             ret = self.model(output_hidden_states=True, return_dict=True, **inputs)
             all_layer_outputs = list(ret.hidden_states)
-            all_layer_outputs[-1] = ret.last_hidden_state
+            if hasattr(ret, 'last_hidden_state'):
+                all_layer_outputs[-1] = ret.last_hidden_state
             if return_all_layer_outputs:
                 return (all_layer_outputs, ret.logits) if return_mlm_logits else all_layer_outputs
             outputs = all_layer_outputs[layer_index]
