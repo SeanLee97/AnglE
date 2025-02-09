@@ -7,6 +7,10 @@
 Please find the document in [☕️ Espresso](README_Espresso.md)
 
 
+# Usage
+
+2DMSE has already been integrated into `sentence-transformers`; please refer to https://sbert.net/examples/training/adaptive_layer/README.html for training.
+
 # Citation
 
 ```bibtex
