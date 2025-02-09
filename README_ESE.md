@@ -1,6 +1,7 @@
 # Espresso Sentence Embeddings (previously known as 2DMSE)
 
-> Paper: https://arxiv.org/abs/2402.14776
+> Paper: https://arxiv.org/abs/2402.14776 (ICLR 2025)
+
 
 ## Abstract
 
@@ -12,8 +13,9 @@ Second, the **learn-to-compress** process compacts essential features into the i
 This way, ESE can scale model depth via the former process and embedding size via the latter.
 Extensive experiments on STS and RAG suggest that ESE can effectively produce high-quality embeddings with less model depth and embedding size, enhancing embedding inference efficiency.
 
-## How to train
+## Usage
 
+### 1. Train with angle-emb
 To enable espresso sentence embeddings (ESE), please specify `--apply_ese 1` and configure appropriate ESE hyperparameters via `--ese_kl_temperature float` and `--ese_compression_size integer`.
 
 Here is an training example:
@@ -36,6 +38,11 @@ WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --m
 --ese_compression_size 128 \
 --ese_kl_temperature 1.0
 ```
+
+### 2. Train with sentence-transformers
+
+Espresso has already been integrated into `sentence-transformers`; please refer to https://sbert.net/examples/training/adaptive_layer/README.html for training.
+
 
 # Citation
 
