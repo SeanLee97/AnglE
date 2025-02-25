@@ -17,11 +17,13 @@ If you train with Espresso technique, please also cite the following paper:
 
 .. code-block:: bibtex
 
-    @article{li2024ese,
-        title={ESE: Espresso Sentence Embeddings},
-        author={Li, Xianming and Li, Zongxi and Li, Jing and Xie, Haoran and Li, Qing},
-        journal={arXiv preprint arXiv:2402.14776},
-        year={2024}
+    @inproceedings{
+        li2025ese,
+        title={{ESE}: Espresso Sentence Embeddings},
+        author={Xianming LI and Zongxi Li and Jing Li and Haoran Xie and Qing Li},
+        booktitle={The Thirteenth International Conference on Learning Representations},
+        year={2025},
+        url={https://openreview.net/forum?id=plgLA2YBLH}
     }
 
 
