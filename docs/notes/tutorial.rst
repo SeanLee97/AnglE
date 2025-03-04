@@ -67,7 +67,6 @@ And here's another example of training a BERT-large model:
     --train_subset_name all_pubmed_en_v1 \
     --save_dir ckpts/uae-medical-large-v1 \
     --model_name_or_path WhereIsAI/UAE-Large-V1 \
-    --load_mlm_model 1 \
     --pooling_strategy cls \
     --maxlen 75 \
     --ibn_w 1.0 \
