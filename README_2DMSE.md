@@ -4,7 +4,7 @@
 
 "🪆 2D Matryoshka Sentence Embeddings" has been renamed to ☕️ "ESE: Espresso Sentence Embeddings". 
 
-Please find the document in [☕️ Espresso](README_Espresso.md)
+Please find the document in [☕️ Espresso](README_ESE.md)
 
 
 # Usage
