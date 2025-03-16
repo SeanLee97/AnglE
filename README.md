@@ -33,10 +33,10 @@ This library is from the paper: [AnglE: Angle-optimized Text Embeddings](https:/
 ## ✨ Features
 
 **Loss**:
-- 📐 AnglE loss
+- 📐 AnglE loss (ACL24)
 - ⚖ Contrastive loss
 - 📏 CoSENT loss
-- ☕️ Espresso loss (previously known as 2DMSE, detail: [README_ESE](README_ESE.md))
+- ☕️ Espresso loss (ICLR 2025, a.k.a 2DMSE, detail: [README_ESE](README_ESE.md))
 
 **Backbones**:
 - BERT-based models (BERT, RoBERTa, ELECTRA, ALBERT, etc.)
