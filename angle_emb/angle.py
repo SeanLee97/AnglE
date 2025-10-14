@@ -1,38 +1,47 @@
 # -*- coding: utf-8 -*-
 
-import os
-import re
-import sys
 import json
 import math
+import os
 import random
-from functools import partial
-from typing import Any, Dict, Optional, List, Union, Tuple, Callable
+import re
+import sys
 from dataclasses import dataclass, field
+from functools import partial
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import bitsandbytes as bnb
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import bitsandbytes as bnb
 from datasets import Dataset
-from transformers import (
-    AutoModelForCausalLM, AutoModel, AutoModelForMaskedLM, AutoTokenizer,
-    PreTrainedModel, Trainer, TrainingArguments, TrainerCallback, BitsAndBytesConfig
-)
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-from transformers.utils import PaddingStrategy
 from huggingface_hub import repo_exists
 from peft import (
-    get_peft_model, LoraConfig, TaskType, PeftModel,
+    LoraConfig,
+    PeftModel,
+    TaskType,
+    get_peft_model,
     prepare_model_for_kbit_training,
 )
 from peft.tuners.lora import LoraLayer
+from transformers import (
+    AutoModel,
+    AutoModelForCausalLM,
+    AutoModelForMaskedLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    PreTrainedModel,
+    Trainer,
+    TrainerCallback,
+    TrainingArguments,
+)
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from transformers.utils import PaddingStrategy
 
 from .base import AngleBase
-from .utils import logger
 from .evaluation import CorrelationEvaluator
+from .utils import logger
 from .version import __version__
-
 
 DEFAULT_LLM_PATTERNS = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*', r'.*mistral.*']
 

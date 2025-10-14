@@ -2,8 +2,8 @@
 
 import sys
 
+from peft import PeftConfig, PeftModel
 from transformers import AutoModelForCausalLM
-from peft import PeftModel, PeftConfig
 
 if len(sys.argv) != 3:
     print('python upload_model.py local_path remote_path')

@@ -5,7 +5,6 @@ from typing import List
 
 from scipy import spatial
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('AnglE')
 

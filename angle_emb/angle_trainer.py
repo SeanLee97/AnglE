@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-import os
 import argparse
+import os
 import random
 
 import numpy as np
@@ -10,7 +10,6 @@ from datasets import load_dataset, load_from_disk
 
 from angle_emb import AnglE, AngleDataTokenizer
 from angle_emb.utils import logger
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_name_or_path', type=str, required=True,
