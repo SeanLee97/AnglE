@@ -376,6 +376,10 @@ print('Spearman\'s corrcoef:', corrcoef)
   - Use `--text_prompt` for Format A (applies to both text1 and text2)
   - Use `--query_prompt` for query field in Format B/C
   - Use `--doc_prompt` for positive/negative fields in Format B/C
+- **To adapt old datasets with different column names**, use `--column_rename_mapping`:
+  - Command-line: `--column_rename_mapping "text:query"` (remap "text" to "query")
+  - Python: `column_rename_mapping={"text": "query"}`
+  - This allows backward compatibility with datasets using old field names
 - To convert the trained AnglE models to `sentence-transformers`, please run `python scripts/convert_to_sentence_transformers.py --help` for more details.
 
 
@@ -416,7 +420,7 @@ If you use our code and pre-trained models, please support us by citing our work
 
 | 📅 | Description |
 |----|------|
-| 2025 Jan |  **Major refactoring**: Removed `AngleDataTokenizer`, simplified data pipeline, removed auto-detection of LLM models, added separate prompt parameters |
+| 2025 Jan |  **v0.6.0 - Major refactoring** 🎉: <br/>• Removed `AngleDataTokenizer` - no need to pre-tokenize datasets!<br/>• Removed `DatasetFormats` class - use string literals ('A', 'B', 'C')<br/>• Removed auto-detection of LLM models - set `is_llm` manually<br/>• Renamed `--prompt_template` to `--text_prompt` (Format A only)<br/>• Added `--query_prompt` and `--doc_prompt` for Format B/C<br/>• Added `--column_rename_mapping` to adapt old datasets without modification<br/>• Updated data formats: Format B/C now use `query`, `positive`, `negative` fields<br/>• Support list-based sampling in Format B/C<br/>• Updated examples to use `accelerate launch`<br/>• See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) for upgrade instructions |
 | 2024 May 21 |  support Espresso Sentence Embeddings  |
 | 2024 Feb 7 |  support training with only positive pairs (Format C: query, positive)  |
 | 2023 Dec 4 |  Release a universal English sentence embedding model: [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1)  |
