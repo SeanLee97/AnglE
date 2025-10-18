@@ -215,12 +215,14 @@ def main():
             ds = load_dataset('json',
                               data_files=[args.train_name_or_path],
                               num_proc=args.workers,
-                              streaming=args.streaming)
+                              streaming=args.streaming,
+                              split=args.train_split_name)
     else:
         ds = load_dataset(args.train_name_or_path,
                           args.train_subset_name,
                           num_proc=args.workers,
-                          streaming=args.streaming)
+                          streaming=args.streaming,
+                          split=args.train_split_name)
 
     if args.column_rename_mapping is not None:
         column_rename_mapping = {k.strip(): v.strip() for k, v in [item.split(':') for item in args.column_rename_mapping.split(';')]}
@@ -231,9 +233,9 @@ def main():
     print(ds)
     logger.info('Processing train...')
     if args.streaming:
-        train_ds = ds[args.train_split_name].shuffle(args.dataset_seed)
+        train_ds = ds.shuffle(args.dataset_seed)
     else:
-        train_ds = ds[args.train_split_name].shuffle(args.dataset_seed)
+        train_ds = ds.shuffle(args.dataset_seed)
 
     valid_ds = None
     if valid_ds is None and args.valid_name_or_path is not None:
@@ -242,13 +244,12 @@ def main():
             if os.path.isdir(args.valid_name_or_path):
                 valid_ds = load_from_disk(args.valid_name_or_path)
             else:
-                valid_ds = load_dataset('json', data_files=[args.valid_name_or_path], num_proc=args.workers)
+                valid_ds = load_dataset('json', data_files=[args.valid_name_or_path], num_proc=args.workers, split=args.valid_split_name or 'train')
         else:
             if args.valid_subset_name is not None:
-                valid_ds = load_dataset(args.valid_name_or_path, args.valid_subset_name, num_proc=args.workers)
+                valid_ds = load_dataset(args.valid_name_or_path, args.valid_subset_name, num_proc=args.workers, split=args.valid_split_name or 'train')
             else:
-                valid_ds = load_dataset(args.valid_name_or_path, num_proc=args.workers)
-        valid_ds = valid_ds[args.valid_split_name or 'train']
+                valid_ds = load_dataset(args.valid_name_or_path, num_proc=args.workers, split=args.valid_split_name or 'train')
 
     valid_ds_for_callback = None
     if valid_ds_for_callback is None and args.valid_name_or_path_for_callback is not None:
