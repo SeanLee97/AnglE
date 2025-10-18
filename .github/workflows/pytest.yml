@@ -18,7 +18,7 @@ jobs:
       run: |
         python -m pip install --upgrade uv
         uv pip install -e . --system
-        uv pip install -e ".[dev]" --system`
+        uv pip install -e ".[dev]" --system
     - name: Analysing the code with pytest
       run: |
         pytest -vvvv  --cov=AnglE tests/
