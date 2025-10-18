@@ -10,9 +10,7 @@ def test_loadding():
     vecs = angle.encode(['hello world', 'hi there👋'])
     assert isinstance(vecs, np.ndarray)
     # test prompt
-    vecs = angle.encode({'text': 'hello world'}, prompt=Prompts.C)
-    assert isinstance(vecs, np.ndarray)
-    vecs = angle.encode([{'text': 'hello world'}, {'text': 'hi there👋'}], prompt=Prompts.C)
+    vecs = angle.encode(['hello world', 'hi there👋'], prompt=Prompts.C)
     assert isinstance(vecs, np.ndarray)
 
 

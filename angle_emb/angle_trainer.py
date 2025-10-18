@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import argparse
 import os
 import random
@@ -8,7 +6,7 @@ import numpy as np
 import torch
 from datasets import load_dataset, load_from_disk
 
-from angle_emb import AnglE, AngleDataTokenizer
+from angle_emb import AnglE
 from angle_emb.utils import logger
 
 parser = argparse.ArgumentParser()
@@ -22,6 +20,8 @@ parser.add_argument('--pretrained_model_path', type=str, default=None,
                     help='Specify pretrained model path to load pretrained model, default None')
 parser.add_argument('--pretrained_lora_path', type=str, default=None,
                     help='Specify pretrained lora path to load lora, default None')
+parser.add_argument('--column_rename_mapping', type=str, default=None,
+                    help='Specify column rename mapping, default None. Format: "old_name:new_name;..."')
 parser.add_argument('--train_name_or_path', type=str, required=True,
                     help='Specify huggingface datasets name or local file path for train set, required')
 parser.add_argument('--train_subset_name', type=str, default=None,
@@ -36,22 +36,22 @@ parser.add_argument('--valid_split_name', type=str, default='train',
                     help='Specify huggingface datasets split name for valid set, default `train`')
 parser.add_argument('--valid_name_or_path_for_callback', type=str, default=None,
                     help='Specify huggingface datasets name or local file path for callback valid set. '
-                         'The dataset format should be `DatasetFormats.A`. Default None.')
+                         'The dataset format should be format A (text1, text2, label). Default None.')
 parser.add_argument('--valid_subset_name_for_callback', type=str, default=None,
                     help='Specify huggingface datasets subset name for valid set for callback use, default None')
 parser.add_argument('--valid_split_name_for_callback', type=str, default='train',
                     help='Specify huggingface datasets split name for valid set for callback use, default `train`')
-parser.add_argument('--prompt_template', type=str, default=None,
-                    help='Specify prompt_template like "xxx: {text}", default None.'
-                         'This prompt will be applied for all text columns.'
-                         'If you want to specify different prompts for different text columns,'
-                         'please handle it in the preprocessing step.')
-parser.add_argument('--fix_data', type=int, default=1, choices=[0, 1],
-                    help='Whether fix data (only works when prompt_template is not None), choices [0, 1], defaut 1')
-parser.add_argument('--filter_duplicate', type=int, default=1, choices=[0, 1],
-                    help='Specify filter_duplicate, choices [0, 1], defaut 1')
-parser.add_argument('--save_dir', type=str, default=None,
-                    help='Specify save dir, default None')
+parser.add_argument('--text_prompt', type=str, default=None,
+                    help='Specify text_prompt like "xxx: {text}", default None.'
+                         'This prompt will be applied to text1 and text2 (format A only).')
+parser.add_argument('--query_prompt', type=str, default=None,
+                    help='Specify query_prompt like "query: {text}", default None. Applied to query field.')
+parser.add_argument('--doc_prompt', type=str, default=None,
+                    help='Specify doc_prompt like "document: {text}", default None. Applied to positive and negative fields.')
+parser.add_argument('--filter_duplicate', type=int, default=0, choices=[0, 1],
+                    help='Specify filter_duplicate, choices [0, 1], default 0')
+parser.add_argument('--save_dir', type=str, default=None, required=True,
+                    help='Specify save dir, default None, required')
 parser.add_argument('--seed', type=int, default=-1,
                     help='Specify random seed, default -1')
 parser.add_argument('--dataset_seed', type=int, default=None,
@@ -112,6 +112,8 @@ parser.add_argument('--torch_dtype', type=str, default=None, choices=['auto', 'f
                     help='Specify torch_dtype from [`auto`, `float32`, `float16`, `bfloat16`], default None')
 parser.add_argument('--fp16', type=bool, default=None, choices=[0, 1],
                     help='Specify fp16, choices [0, 1], default None')
+parser.add_argument('--bf16', type=bool, default=None, choices=[0, 1],
+                    help='Specify bf16, choices [0, 1], default None')
 parser.add_argument('--push_to_hub', type=int, default=0, choices=[0, 1], help='Specify push_to_hub, default 0')
 parser.add_argument('--hub_private_repo', type=int, default=1, choices=[0, 1],
                     help='Specify hub_private_repo, default 1')
@@ -141,12 +143,14 @@ parser.add_argument('--teacher_name_or_path', type=str, default=None,
                     help='Specify model_name_or_path for teacher alignment, default None')
 parser.add_argument('--teacher_pooling_strategy', type=str, default='cls',
                     help='Specify pooling strategy for teacher from [`cls`, `last`, `avg`, `cls_avg`, `max`], default `cls`')  # NOQA
-# configure coword_random_mask_rate
-parser.add_argument('--coword_random_mask_rate', type=float, default=0,
-                    help='Specify coword_random_mask_rate, default 0')
 # configure wandb
 parser.add_argument('--wandb_project', type=str, default=None, help='Specify WANDB_PROJECT, default None')
 parser.add_argument('--wandb_log_model', type=str, default=None, help='Specify WANDB_LOG_MODEL, default None')
+# configure for fsdp
+parser.add_argument('--gradient_checkpointing', type=int, default=0, choices=[0, 1],
+                    help='Specify gradient_checkpointing, choices [0, 1], default 0, set it to 1 if you want to use fsdp')
+parser.add_argument('--use_reentrant', type=int, default=1, choices=[0, 1],
+                    help='Specify use_reentrant, choices [0, 1], default 1, set it to 0 if you want to use fsdp')
 args = parser.parse_args()
 logger.info(f'Args: {args}')
 
@@ -184,10 +188,6 @@ lora_config = {
 if args.lora_target_modules is not None:
     lora_config['target_modules'] = [v.strip() for v in args.lora_target_modules.split(',') if v.strip()]
 
-if args.coword_random_mask_rate > 0 and not args.load_mlm_model:
-    logger.info('Detect coword_random_mask_rate > 0, automattically set load_mlm_model to 1')
-    args.load_mlm_model = 1
-
 
 def main():
     model = AnglE(args.model_name_or_path,
@@ -222,21 +222,18 @@ def main():
                           num_proc=args.workers,
                           streaming=args.streaming)
 
+    if args.column_rename_mapping is not None:
+        column_rename_mapping = {k.strip(): v.strip() for k, v in [item.split(':') for item in args.column_rename_mapping.split(';')]}
+        logger.info(f'Column rename mapping: {column_rename_mapping}')
+        ds = ds.rename_columns(column_rename_mapping)
+
     logger.info('Dataset overview:')
     print(ds)
     logger.info('Processing train...')
     if args.streaming:
-        train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
-            AngleDataTokenizer(model.tokenizer, model.max_length,
-                               prompt_template=args.prompt_template,
-                               fix_data=args.fix_data),
-            num_proc=args.workers)
+        train_ds = ds[args.train_split_name].shuffle(args.dataset_seed)
     else:
-        train_ds = ds[args.train_split_name].shuffle(args.dataset_seed).map(
-            AngleDataTokenizer(model.tokenizer, model.max_length,
-                               prompt_template=args.prompt_template,
-                               fix_data=args.fix_data),
-            num_proc=args.workers)
+        train_ds = ds[args.train_split_name].shuffle(args.dataset_seed)
 
     valid_ds = None
     if valid_ds is None and args.valid_name_or_path is not None:
@@ -251,11 +248,7 @@ def main():
                 valid_ds = load_dataset(args.valid_name_or_path, args.valid_subset_name, num_proc=args.workers)
             else:
                 valid_ds = load_dataset(args.valid_name_or_path, num_proc=args.workers)
-        valid_ds = valid_ds[args.valid_split_name or 'train'].map(
-            AngleDataTokenizer(model.tokenizer, model.max_length,
-                               prompt_template=args.prompt_template,
-                               fix_data=args.fix_data),
-            num_proc=args.workers)
+        valid_ds = valid_ds[args.valid_split_name or 'train']
 
     valid_ds_for_callback = None
     if valid_ds_for_callback is None and args.valid_name_or_path_for_callback is not None:
@@ -275,11 +268,7 @@ def main():
             else:
                 valid_ds_for_callback = load_dataset(
                     args.valid_name_or_path_for_callback, num_proc=args.workers)
-        valid_ds_for_callback = valid_ds_for_callback[args.valid_split_name_for_callback or 'train'].map(
-            AngleDataTokenizer(model.tokenizer, model.max_length,
-                               prompt_template=args.prompt_template,
-                               fix_data=args.fix_data),
-            num_proc=args.workers)
+        valid_ds_for_callback = valid_ds_for_callback[args.valid_split_name_for_callback or 'train']
 
     argument_kwargs = {}
     if args.push_to_hub:
@@ -291,6 +280,10 @@ def main():
         argument_kwargs['report_to'] = 'wandb'
     if args.max_steps > 0:
         argument_kwargs['max_steps'] = args.max_steps
+    # configure for fsdp
+    argument_kwargs['gradient_checkpointing'] = bool(args.gradient_checkpointing)
+    argument_kwargs['gradient_checkpointing_kwargs'] = {'use_reentrant': bool(args.use_reentrant)}
+    argument_kwargs['dataloader_num_workers'] = args.workers
 
     trainer_kwargs = None
     if args.teacher_name_or_path is not None:
@@ -331,12 +324,15 @@ def main():
             'angle_tau': args.angle_tau,
         },
         fp16=args.fp16,
+        bf16=args.bf16,
         filter_duplicate=args.filter_duplicate,
         argument_kwargs=argument_kwargs,
         apply_ese=args.apply_ese,
         trainer_kwargs=trainer_kwargs,
-        coword_random_mask_rate=args.coword_random_mask_rate,
         padding=args.tokenizer_padding,
+        text_prompt=args.text_prompt,
+        query_prompt=args.query_prompt,
+        doc_prompt=args.doc_prompt,
     )
 
 

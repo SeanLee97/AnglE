@@ -1,12 +1,10 @@
-# -*- coding: utf-8 -*-
-
 import json
 import math
 import os
 import random
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -40,263 +38,27 @@ from transformers.utils import PaddingStrategy
 
 from .base import AngleBase
 from .evaluation import CorrelationEvaluator
-from .utils import logger
+from .loss import (
+    angle_loss,
+    contrastive_with_negative_loss,
+    cosine_loss,
+    in_batch_negative_loss,
+)
+from .utils import find_all_linear_names, get_pooling, logger, set_device
 from .version import __version__
 
-DEFAULT_LLM_PATTERNS = [r'.*llama.*', r'.*qwen.*', r'.*baichuan.*', r'.*mistral.*']
 
-
-def set_device() -> str:
-    """
-    Set device automatically
-
-    :return: str, device name
-    """
-    if torch.cuda.is_available():
-        return 'cuda'
-    elif torch.backends.mps.is_available():
-        return 'mps'
-    return 'cpu'
-
-
-def find_all_linear_names(model: PreTrainedModel, linear_type: Optional[object] = None) -> List[str]:
-    """
-    Find all linear layer names
-
-    :param model: PreTrainedModel
-    :param linear_type: Optional[object] = None, linear type, such as nn.Linear and bnb.nn.Linear4bit.
-
-    :return: List[str], linear layer names
-    """
-    if linear_type is None:
-        linear_type = nn.Linear
-    lora_module_names = set()
-    for name, module in model.named_modules():
-        if isinstance(module, linear_type):
-            names = name.split('.')
-            lora_module_names.add(names[0] if len(names) == 1 else names[-1])
-
-    if 'lm_head' in lora_module_names:
-        lora_module_names.remove('lm_head')
-    return list(lora_module_names)
-
-
-def categorical_crossentropy(y_true: torch.Tensor, y_pred: torch.Tensor, from_logits: bool = True) -> torch.Tensor:
-    """
-    Compute categorical crossentropy
-
-    :param y_true: torch.Tensor, ground truth
-    :param y_pred: torch.Tensor, model output
-    :param from_logits: bool, `True` means y_pred has not transformed by softmax, default True
-
-    :return: torch.Tensor, loss value
-    """
-    if from_logits:
-        return -(F.log_softmax(y_pred, dim=1) * y_true).sum(dim=1)
-    return -(torch.log(y_pred, dim=1) * y_true).sum(dim=1)
-
-
-def cosine_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 20.0) -> torch.Tensor:
-    """
-    Compute cosine loss
-
-    :param y_true: torch.Tensor, ground truth.
-        The y_true must be zigzag style, such as [x[0][0], x[0][1], x[1][0], x[1][1], ...], where (x[0][0], x[0][1]) stands for a pair.
-    :param y_pred: torch.Tensor, model output.
-        The y_pred must be zigzag style, such as [o[0][0], o[0][1], o[1][0], o[1][1], ...], where (o[0][0], o[0][1]) stands for a pair.
-    :param tau: float, scale factor, default 20
-
-    :return: torch.Tensor, loss value
-    """  # NOQA
-    # modified from: https://github.com/bojone/CoSENT/blob/124c368efc8a4b179469be99cb6e62e1f2949d39/cosent.py#L79
-    y_true = y_true[::2, 0]
-    y_true = (y_true[:, None] < y_true[None, :]).float()
-    y_pred = F.normalize(y_pred, p=2, dim=1)
-    y_pred = torch.sum(y_pred[::2] * y_pred[1::2], dim=1) * tau
-    y_pred = y_pred[:, None] - y_pred[None, :]
-    y_pred = (y_pred - (1 - y_true) * 1e12).view(-1)
-    zero = torch.Tensor([0]).to(y_pred.device)
-    y_pred = torch.concat((zero, y_pred), dim=0)
-    return torch.logsumexp(y_pred, dim=0)
-
-
-def angle_loss(y_true: torch.Tensor, y_pred: torch.Tensor, tau: float = 1.0, pooling_strategy: str = 'sum'):
-    """
-    Compute angle loss
-
-    :param y_true: torch.Tensor, ground truth.
-        The y_true must be zigzag style, such as [x[0][0], x[0][1], x[1][0], x[1][1], ...], where (x[0][0], x[0][1]) stands for a pair.
-    :param y_pred: torch.Tensor, model output.
-        The y_pred must be zigzag style, such as [o[0][0], o[0][1], o[1][0], o[1][1], ...], where (o[0][0], o[0][1]) stands for a pair.
-    :param tau: float, scale factor, default 1.0
-
-    :return: torch.Tensor, loss value
-    """  # NOQA
-    y_true = y_true[::2, 0]
-    y_true = (y_true[:, None] < y_true[None, :]).float()
-
-    y_pred_re, y_pred_im = torch.chunk(y_pred, 2, dim=1)
-    a = y_pred_re[::2]
-    b = y_pred_im[::2]
-    c = y_pred_re[1::2]
-    d = y_pred_im[1::2]
-
-    # (a+bi) / (c+di)
-    # = ((a+bi) * (c-di)) / ((c+di) * (c-di))
-    # = ((ac + bd) + i(bc - ad)) / (c^2 + d^2)
-    # = (ac + bd) / (c^2 + d^2) + i(bc - ad)/(c^2 + d^2)
-    z = torch.sum(c**2 + d**2, dim=1, keepdim=True)
-    re = (a * c + b * d) / z
-    im = (b * c - a * d) / z
-
-    dz = torch.sum(a**2 + b**2, dim=1, keepdim=True)**0.5
-    dw = torch.sum(c**2 + d**2, dim=1, keepdim=True)**0.5
-    re /= (dz / dw)
-    im /= (dz / dw)
-
-    y_pred = torch.concat((re, im), dim=1)
-    if pooling_strategy == 'sum':
-        pooling = torch.sum(y_pred, dim=1)
-    elif pooling_strategy == 'mean':
-        pooling = torch.mean(y_pred, dim=1)
+def detect_dataset_format(ds: Dataset) -> str:
+    """Detect dataset format from raw data"""
+    columns = ds.column_names
+    if 'text1' in columns and 'text2' in columns and 'label' in columns:
+        return 'A'
+    elif 'query' in columns and 'positive' in columns and 'negative' in columns:
+        return 'C'
+    elif 'query' in columns and 'positive' in columns:
+        return 'B'
     else:
-        raise ValueError(f'Unsupported pooling strategy: {pooling_strategy}')
-    y_pred = torch.abs(pooling) * tau  # absolute delta angle
-    y_pred = y_pred[:, None] - y_pred[None, :]
-    y_pred = (y_pred - (1 - y_true) * 1e12).view(-1)
-    zero = torch.Tensor([0]).to(y_pred.device)
-    y_pred = torch.concat((zero, y_pred), dim=0)
-    return torch.logsumexp(y_pred, dim=0)
-
-
-def in_batch_negative_loss(y_true: torch.Tensor,
-                           y_pred: torch.Tensor,
-                           tau: float = 20.0,
-                           negative_weights: float = 0.0) -> torch.Tensor:
-    """
-    Compute in-batch negative loss, i.e., contrastive loss
-
-    :param y_true: torch.Tensor, ground truth.
-        The y_true must be zigzag style, such as [x[0][0], x[0][1], x[1][0], x[1][1], ...], where (x[0][0], x[0][1]) stands for a pair.
-    :param y_pred: torch.Tensor, model output.
-        The y_pred must be zigzag style, such as [o[0][0], o[0][1], o[1][0], o[1][1], ...], where (o[0][0], o[0][1]) stands for a pair.
-    :param tau: float, scale factor, default 20.0
-    :param negative_weights: float, negative weights, default 0.0
-
-    :return: torch.Tensor, loss value
-    """  # NOQA
-    device = y_true.device
-
-    def make_target_matrix(y_true: torch.Tensor):
-        idxs = torch.arange(0, y_pred.shape[0]).int().to(device)
-        y_true = y_true.int()
-        idxs_1 = idxs[None, :]
-        idxs_2 = (idxs + 1 - idxs % 2 * 2)[:, None]
-
-        idxs_1 *= y_true.T
-        idxs_1 += (y_true.T == 0).int() * -2
-
-        idxs_2 *= y_true
-        idxs_2 += (y_true == 0).int() * -1
-
-        y_true = (idxs_1 == idxs_2).float()
-        return y_true
-
-    neg_mask = make_target_matrix(y_true == 0)
-
-    y_true = make_target_matrix(y_true)
-
-    # compute similarity
-    y_pred = F.normalize(y_pred, dim=1, p=2)
-    similarities = y_pred @ y_pred.T  # dot product
-    similarities = similarities - torch.eye(y_pred.shape[0]).to(device) * 1e12
-    similarities = similarities * tau
-
-    if negative_weights > 0:
-        similarities += neg_mask * negative_weights
-
-    return categorical_crossentropy(y_true, similarities, from_logits=True).mean()
-
-
-def contrastive_with_negative_loss(
-        text: torch.Tensor,
-        pos: torch.Tensor,
-        neg: Optional[torch.Tensor] = None,
-        tau: float = 20.0) -> torch.Tensor:
-    """
-    Compute contrastive with negative loss
-
-    :param text: torch.Tensor, text.
-    :param pos: torch.Tensor, positive samples of text.
-    :param neg: torch.Tensor, negative samples of text.
-    :param tau: float, scale factor, default 20.0
-
-    :return: torch.Tensor, loss value
-    """
-    target = torch.cat((pos, neg), dim=0) if neg is not None else pos  # (2B, D)
-    q_norm = torch.nn.functional.normalize(text, p=2, dim=1)  # (B, D)
-    t_norm = torch.nn.functional.normalize(target, p=2, dim=1)  # (2B, D)
-    scores = torch.mm(q_norm, t_norm.transpose(0, 1)) * tau  # (B, 2B)
-    labels = torch.tensor(
-        range(len(scores)), dtype=torch.long, device=scores.device
-    )
-    return nn.CrossEntropyLoss()(scores, labels)
-
-
-def check_llm(model_name_or_path: str, llm_regex_patterns: List[str] = None) -> bool:
-    if llm_regex_patterns is not None:
-        llm_regex_patterns += DEFAULT_LLM_PATTERNS
-    else:
-        llm_regex_patterns = DEFAULT_LLM_PATTERNS
-    model_name_or_path = model_name_or_path.lower()
-    for pattern in llm_regex_patterns:
-        if re.match(pattern, model_name_or_path):
-            return True
-    return False
-
-
-def get_pooling(outputs: torch.Tensor,
-                inputs: Dict,
-                pooling_strategy: str,
-                padding_side: str) -> torch.Tensor:
-    """ Pooling the model outputs.
-
-    :param outputs:  torch.Tensor. Model outputs (without pooling)
-    :param inputs:  Dict. Model inputs
-    :param pooling_strategy:  str.
-        Pooling strategy [`cls`, `cls_avg`, `cls_max`, `last`, `avg`, `mean`, `max`, `all`, int]
-    :param padding_side:  str. Padding strategy of tokenizers (`left` or `right`).
-        It can be obtained by `tokenizer.padding_side`.
-    """
-    if pooling_strategy == 'cls':
-        outputs = outputs[:, 0]
-    elif pooling_strategy == 'cls_avg':
-        avg = torch.sum(
-            outputs * inputs["attention_mask"][:, :, None], dim=1) / inputs["attention_mask"].sum(dim=1).unsqueeze(1)
-        outputs = (outputs[:, 0] + avg) / 2.0
-    elif pooling_strategy == 'cls_max':
-        maximum, _ = torch.max(outputs * inputs["attention_mask"][:, :, None], dim=1)
-        outputs = (outputs[:, 0] + maximum) / 2.0
-    elif pooling_strategy == 'last':
-        batch_size = inputs['input_ids'].shape[0]
-        sequence_lengths = -1 if padding_side == 'left' else inputs["attention_mask"].sum(dim=1) - 1
-        outputs = outputs[torch.arange(batch_size, device=outputs.device), sequence_lengths]
-    elif pooling_strategy in ['avg', 'mean']:
-        outputs = torch.sum(
-            outputs * inputs["attention_mask"][:, :, None], dim=1) / inputs["attention_mask"].sum(dim=1).unsqueeze(1)
-    elif pooling_strategy == 'max':
-        outputs, _ = torch.max(outputs * inputs["attention_mask"][:, :, None], dim=1)
-    elif pooling_strategy == 'all':
-        # keep outputs
-        pass
-    elif isinstance(pooling_strategy, int) or pooling_strategy.isnumeric():
-        # index
-        outputs = outputs[:, int(pooling_strategy)]
-    else:
-        raise NotImplementedError(
-            'please specify pooling_strategy from '
-            '[`cls`, `cls_avg`, `cls_max`, `last`, `avg`, `mean`, `max`, `all`, int]')
-    return outputs
+        raise NotImplementedError('Unable to detect dataset format')
 
 
 class Prompts:
@@ -325,226 +87,21 @@ class Prompts:
             print(f'Prompts.{key}', '=', f"'{val}'")
 
 
-class DatasetFormats:
-    """
-    Predefined Data Formats.
-
-    Check all available formats:
-
-            from angle_emb import DatasetFormats
-
-            print(DatasetFormats.list_formats())
-
-    """
-
-    """
-    format A: text1,text2,label
-    input format: [
-        text1[0],
-        text2[0],
-        text1[1],
-        text2[1],
-        ...
-    ]
-    label format: [
-        label[0],
-        label[0],
-        label[1],
-        label[1],
-        ...
-    ]
-    """
-    A = 'text1,text2,label'
-
-    """
-    format B: text,positive,negative
-    input format: [
-        text[0],
-        positive[0],
-        negative[0],
-        text[1],
-        positive[1],
-        negative[1],
-        ...
-    ]
-    """
-    B = 'text,positive,negative'
-
-    """
-    format C: text,positive
-    input format: [
-        text[0],
-        positive[0],
-        text[1],
-        positive[1],
-        ...
-    ]
-    """
-    C = 'text,positive'
-
-    @classmethod
-    def list_formats(cls):
-        for key, val in DatasetFormats.__dict__.items():
-            if key.startswith('_') or key == 'list_formats':
-                continue
-            print(f'DatasetFormats.{key}', '=', f"'{val}'")
-
-
-class AngleDataTokenizer:
-    """
-    Tokenize data using AngleDataTokenizer.
-
-    :param tokenizer: PreTrainedTokenizerBase. Tokenizer
-    :param max_length: Optional[int]. Specify max length
-    :param prompt_template: Optional[str], set prompt template, it will be applied to all input texts. Default None
-    :param extra_columns: Optional[List[str]].
-        If providing multiple placeholders in prompt_template, specify their name via extra_columns. Default None
-    :param dataset_format: Optional[str]. Specify dataset_format from DatasetFormats. Default None.
-        It will automatically detect the dataset format.
-    :param fix_data: bool. Specify whether fix the data. Only works when prompt_template is not None. Default True.
-
-    Example::
-
-            from datasets import load_dataset
-            from angle_emb import AnglE, AngleDataTokenizer
-
-            # define dataset
-            ds = load_dataset('your_dataset')
-            # define angle
-            angle = AnglE(*args, **kwargs)
-            # tokenize data
-            train_ds = ds['train'].shuffle().map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
-            valid_ds = ds['validation'].map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
-
-    """
-    def __init__(self,
-                 tokenizer: PreTrainedTokenizerBase,
-                 max_length: Optional[int] = None,
-                 prompt_template: Optional[str] = None,
-                 template_placeholders: Optional[List[str]] = None,
-                 extra_columns: Optional[List[str]] = None,
-                 dataset_format: Optional[str] = None,
-                 fix_data: bool = True):
-        self.tokenizer = tokenizer
-        self.max_length = max_length
-        self.prompt_template = prompt_template
-        self.prompt_template_tok = None
-        self.extra_columns = extra_columns
-        self.dataset_format = dataset_format
-        self.fix_data = fix_data
-        if template_placeholders is None:
-            template_placeholders = ['condition', 'text']
-        if prompt_template is not None:
-            re_placeholder = re.compile(r'\{(%s)\}' % '|'.join(template_placeholders))
-            self.prompt_template_tok = self.tokenizer(re_placeholder.sub('', prompt_template))
-
-    @staticmethod
-    def fix_bad_data(token_ids, prompt_ids):
-        bad_index = -1
-        for idx in range(len(token_ids) - 1, -1, -1):
-            try:
-                bad_index = prompt_ids.index(token_ids[idx])
-            except ValueError:
-                break
-        if bad_index == -1:
-            return token_ids
-        # print('bad index:', prompt_ids[bad_index])
-        to_fix_ids = prompt_ids[bad_index:]
-        return token_ids[:len(token_ids) - len(to_fix_ids)] + to_fix_ids
-
-    def __call__(self, data: Dict) -> Dict:
-        if self.dataset_format is None:
-            if 'text1' in data and 'text2' in data and 'label' in data:
-                logger.info(f'Detect DatasetFormats.A: {DatasetFormats.A}')
-                self.dataset_format = DatasetFormats.A
-            elif 'text' in data and 'positive' in data and 'negative' in data:
-                self.dataset_format = DatasetFormats.B
-                logger.info(f'Detect DatasetFormats.B: {DatasetFormats.B}')
-            elif 'text' in data and 'positive' in data and 'negative' not in data and 'label' not in data:
-                self.dataset_format = DatasetFormats.C
-                logger.info(f'Detect DatasetFormats.C: {DatasetFormats.C}')
-            else:
-                raise NotImplementedError('Currently only support two dataset formats'
-                                          'DatasetFormats A: must include three columns: `text1`, `text2`, and `label`.'
-                                          'DatasetFormats B: mut include three columns: `text`, `positive`, `negative`'
-                                          'DatasetFormats C: mut include three columns: `text`, `positive`')
-        text_columns = None
-        if self.dataset_format == DatasetFormats.A:
-            text_columns = ['text1', 'text2']
-        elif self.dataset_format == DatasetFormats.B:
-            text_columns = ['text', 'positive', 'negative']
-        elif self.dataset_format == DatasetFormats.C:
-            text_columns = ['text', 'positive']
-
-        extra_length = 0
-        extra_placeholder = {}
-        if self.extra_columns is not None:
-            for key, val in data.items():
-                if key not in self.extra_columns:
-                    continue
-                extra_placeholder[key] = val
-                extra_length += len(self.tokenizer(val, add_special_tokens=False)['input_ids'])
-
-        if self.prompt_template_tok is not None:
-            max_length = self.max_length - len(self.prompt_template_tok['input_ids']) - extra_length
-            for text_column in text_columns:
-                tok = self.tokenizer(data[text_column],
-                                     max_length=max_length,
-                                     truncation=True,
-                                     add_special_tokens=False)
-                data[text_column] = self.tokenizer.decode(tok['input_ids'])
-                data[text_column] = self.prompt_template.format(text=data[text_column], **extra_placeholder)
-
-        toks = []
-        for text_column in text_columns:
-            toks.append(self.tokenizer(data[text_column], max_length=self.max_length, truncation=True))
-
-        if self.prompt_template_tok is not None and self.fix_data:
-            for tok in toks:
-                if tok['input_ids'][-1] != self.prompt_template_tok['input_ids'][-1]:
-                    logger.info(f"data data: token ids={tok['input_ids']}, prompt_token_ids={self.prompt_template_tok['input_ids']}")  # NOQA
-                    tok['input_ids'] = self.fix_bad_data(tok['input_ids'], self.prompt_template_tok['input_ids'])
-                    try:
-                        assert len(tok['input_ids']) == len(tok['attention_mask'])
-                        assert tok['input_ids'][-1] == self.prompt_template_tok['input_ids'][-1]
-                        logger.info('fixed it ;)')
-                        logger.info(f"new data, token ids={tok['input_ids']}, prompt_token_ids={self.prompt_template_tok['input_ids']}")  # NOQA
-                    except AssertionError:
-                        logger.info('failed to fix it :( skip it...')
-
-        combined_tok = {}
-        seperate_ids = []
-        for idx, tok in enumerate(toks):
-            for key, val in tok.items():
-                if idx == 0:
-                    combined_tok[key] = val
-                else:
-                    combined_tok[key] += val
-                if key == 'input_ids':
-                    seperate_ids += [idx] * len(val)
-
-        combined_tok['labels'] = [int(data['label']) if 'label' in data else -1]
-        combined_tok['seperate_ids'] = seperate_ids
-        combined_tok['extra'] = {
-            'dataset_format': self.dataset_format,
-            'prompt_token_ids': self.prompt_template_tok['input_ids'] if self.prompt_template_tok is not None else None,
-        }
-        return combined_tok
-
-
 @dataclass
 class AngleDataCollator:
     """
     AngleDataCollator. It will be implicitly used in AnglE.fit().
-    It can only handle the tokenized data using AngleDataTokenizer.
+    It handles raw data, tokenizes it, and prepares batches.
 
     :param tokenizer:  PreTrainedTokenizerBase
     :param padding:   Union[bool, str, PaddingStrategy], padding strategy
     :param max_length:  Optional[int], max length
     :param return_tensors:  str
     :param filter_duplicate: bool. Whether filter duplicate data
-    :param coword_random_mask_rate: float. Default 0.0.
-        If set it greater than 0, the random maked token prediction will be added to the training loss.
+    :param text_prompt: Optional[str], prompt for text1 and text2 (format A only). Default None
+    :param query_prompt: Optional[str], prompt for query field. Default None
+    :param doc_prompt: Optional[str], prompt for positive/negative fields. Default None
+    :param dataset_format: Optional[str]. Specify dataset_format: 'A', 'B', or 'C'. Default None.
     """
 
     tokenizer: PreTrainedTokenizerBase
@@ -552,135 +109,139 @@ class AngleDataCollator:
     max_length: Optional[int] = None
     return_tensors: str = "pt"
     filter_duplicate: bool = True
-    coword_random_mask_rate: float = 0.0
-    special_token_id_names: List[str] = field(default_factory=lambda: [
-        'bos_token_id', 'unk_token_id', 'sep_token_id',
-        'pad_token_id', 'cls_token_id', 'mask_token_id'])
+    text_prompt: Optional[str] = None
+    query_prompt: Optional[str] = None
+    doc_prompt: Optional[str] = None
+    dataset_format: Optional[str] = None
+
+    @staticmethod
+    def sample_from_list(text: Union[str, List[str]]) -> str:
+        """Sample one string from list or return string as is"""
+        if isinstance(text, list):
+            return random.choice(text)
+        return text
 
     def __call__(self, features: List[Dict], return_tensors: str = "pt") -> Dict[str, torch.Tensor]:
-        """ Collate function for AngleDataTokenizer.
+        """ Collate function that handles raw data.
 
-        :param features: List[Dict]. Tokenized data
+        :param features: List[Dict]. Raw data samples
         :param return_tensors: str. Default "pt"
         :return: Dict[str, torch.Tensor]. Collated data
         """
         if return_tensors is None:
             return_tensors = self.return_tensors
-        has_token_type_ids = "token_type_ids" in features[0]
-        prompt_token_ids = set(features[0]['extra']['prompt_token_ids'] or [])
-        special_token_ids = set()
-        for name in self.special_token_id_names:
-            if hasattr(self.tokenizer, name):
-                special_token_ids.add(getattr(self.tokenizer, name))
-        for token in self.tokenizer.additional_special_tokens:
-            special_token_ids.add(self.tokenizer.encode(token)[0])
-        predefined_token_ids = prompt_token_ids | special_token_ids
 
-        if self.coword_random_mask_rate > 0:
-            if not isinstance(self.tokenizer.mask_token_id, int):
-                raise NotImplementedError("Failed to train with random mask common tokens"
-                                          "since the tokenizer does not have a mask token."
-                                          "Please set a special mask token to the tokenizer manually.")
-
-        new_features = []
+        # Auto-detect dataset format from first sample
+        if self.dataset_format is None:
+            sample = features[0]
+            if 'text1' in sample and 'text2' in sample and 'label' in sample:
+                self.dataset_format = 'A'
+                logger.info('Detect dataset format A: text1, text2, label')
+            elif 'query' in sample and 'positive' in sample and 'negative' in sample:
+                self.dataset_format = 'C'
+                logger.info('Detect dataset format C: query, positive, negative')
+            elif 'query' in sample and 'positive' in sample and 'negative' not in sample:
+                self.dataset_format = 'B'
+                logger.info('Detect dataset format B: query, positive')
+            else:
+                raise NotImplementedError(
+                    'Currently only support three dataset formats: '
+                    'Format A: must include three columns: `text1`, `text2`, and `label`. '
+                    'Format B: must include two columns: `query`, `positive`. '
+                    'Format C: must include three columns: `query`, `positive`, `negative`.'
+                )
+        
+        # Process features based on format
+        processed_features = []
         duplicate_set = set()
+
         for feature in features:
-            seperate_ids = feature['seperate_ids']
-            input_ids = feature['input_ids']
-            attention_mask = feature['attention_mask']
-            assert len(seperate_ids) == len(input_ids) == len(attention_mask)
+            texts = []
+            label = -1
 
-            has_token_type_ids = False
-            if "token_type_ids" in feature:
-                has_token_type_ids = True
-                token_type_ids = feature['token_type_ids']
-                assert len(token_type_ids) == len(input_ids)
+            if self.dataset_format == 'A':
+                # Format A: text1, text2, label
+                text1 = self.sample_from_list(feature['text1'])
+                text2 = self.sample_from_list(feature['text2'])
+                label = float(feature['label'])
 
-            max_seperate_id = max(seperate_ids)
-            prev_start_idx = 0
-            current_features = []
+                # Apply text_prompt if provided (only for format A)
+                if self.text_prompt is not None:
+                    text1 = self.text_prompt.format(text=text1)
+                    text2 = self.text_prompt.format(text=text2)
+
+                texts = [text1, text2]
+
+            elif self.dataset_format == 'B':
+                # Format B: query, positive
+                query = self.sample_from_list(feature['query'])
+                positive = self.sample_from_list(feature['positive'])
+
+                # Apply prompts
+                if self.query_prompt is not None:
+                    query = self.query_prompt.format(text=query)
+
+                if self.doc_prompt is not None:
+                    positive = self.doc_prompt.format(text=positive)
+
+                texts = [query, positive]
+
+            elif self.dataset_format == 'C':
+                # Format C: query, positive, negative
+                query = self.sample_from_list(feature['query'])
+                positive = self.sample_from_list(feature['positive'])
+                negative = self.sample_from_list(feature['negative'])
+
+                # Apply prompts
+                if self.query_prompt is not None:
+                    query = self.query_prompt.format(text=query)
+
+                if self.doc_prompt is not None:
+                    positive = self.doc_prompt.format(text=positive)
+                    negative = self.doc_prompt.format(text=negative)
+
+                texts = [query, positive, negative]
+
+            # Tokenize texts
+            tokenized_texts = []
             is_duplicate = False
-            for seperate_id in range(1, max_seperate_id + 1):
-                start_idx = seperate_ids.index(seperate_id)
-                new_feature = {}
-                new_input_ids = input_ids[prev_start_idx:start_idx]
-                if tuple(new_input_ids) in duplicate_set:
-                    is_duplicate = True
-                    if self.filter_duplicate:
-                        break
-                duplicate_set.add(tuple(new_input_ids))
-                new_feature['input_ids'] = new_input_ids
-                new_feature['attention_mask'] = attention_mask[prev_start_idx:start_idx]
-                if has_token_type_ids:
-                    new_feature['token_type_ids'] = token_type_ids[prev_start_idx:start_idx]
-                new_feature['labels'] = feature['labels']
-                current_features.append(new_feature)
-                prev_start_idx = start_idx
+            for text in texts:
+                tok = self.tokenizer(
+                    text,
+                    max_length=self.max_length,
+                    truncation=True,
+                    add_special_tokens=True
+                )
 
-            # last
-            new_feature = {}
-            new_input_ids = input_ids[prev_start_idx:]
-            if tuple(new_input_ids) in duplicate_set:
-                is_duplicate = True
-            duplicate_set.add(tuple(new_input_ids))
-            new_feature['input_ids'] = new_input_ids
-            new_feature['attention_mask'] = attention_mask[prev_start_idx:]
-            if has_token_type_ids:
-                new_feature['token_type_ids'] = token_type_ids[prev_start_idx:]
-            new_feature['labels'] = feature['labels']
-            current_features.append(new_feature)
+                # Check for duplicates
+                input_ids_tuple = tuple(tok['input_ids'])
+                if self.filter_duplicate and input_ids_tuple in duplicate_set:
+                    is_duplicate = True
+                    break
+                duplicate_set.add(input_ids_tuple)
+
+                tok['labels'] = [label]
+                tokenized_texts.append(tok)
 
             if self.filter_duplicate and is_duplicate:
                 continue
 
-            if self.coword_random_mask_rate > 0:
-                first_text_tokens = set(current_features[0]['input_ids']) - predefined_token_ids
-                common_tokens_with_first_text = set()
-                for cnt_fea in current_features[1:]:
-                    cnt_tokens = set(cnt_fea['input_ids']) - predefined_token_ids
-                    cnt_common_tokens = list(cnt_tokens & first_text_tokens)
-                    common_tokens_with_first_text.update(cnt_common_tokens)
-                    if cnt_common_tokens:
-                        sample_size = max(1, int(len(cnt_common_tokens) * self.coword_random_mask_rate))
-                        sampled_mask_tokens = random.sample(cnt_common_tokens, sample_size)
-                        cnt_fea['input_ids'] = [self.tokenizer.mask_token_id
-                                                if idx in sampled_mask_tokens
-                                                else idx for idx in cnt_fea['input_ids']]
-                    cnt_fea['mask_target_labels'] = cnt_fea['input_ids']
+            processed_features.extend(tokenized_texts)
 
-                # mask first text
-                common_tokens_with_first_text = list(common_tokens_with_first_text)
-                if common_tokens_with_first_text:
-                    sample_size = max(1, int(len(common_tokens_with_first_text) * self.coword_random_mask_rate))
-                    sampled_mask_tokens = random.sample(common_tokens_with_first_text, sample_size)
-                    current_features[0]['input_ids'] = [self.tokenizer.mask_token_id
-                                                        if idx in sampled_mask_tokens
-                                                        else idx for idx in current_features[0]['input_ids']]
-                current_features[0]['mask_target_labels'] = current_features[0]['input_ids']
+        # Pad and convert to tensors
+        if not processed_features:
+            raise ValueError('No features to process, please considering disabling filter_duplicate')
 
-            new_features += current_features
-
-        # remove features
-        del features
-
-        features = self.tokenizer.pad(
-            {'input_ids': [feature['input_ids'] for feature in new_features]},
+        batch = self.tokenizer.pad(
+            {'input_ids': [f['input_ids'] for f in processed_features]},
             padding=self.padding,
             max_length=self.max_length,
             return_attention_mask=True,
             return_tensors=return_tensors,
         )
-        features['labels'] = torch.Tensor([feature['labels'] for feature in new_features])
+        batch['labels'] = torch.Tensor([f['labels'] for f in processed_features])
 
-        if self.coword_random_mask_rate > 0:
-            features['mask_target_labels'] = self.tokenizer.pad(
-                    {'input_ids': [feature['mask_target_labels'] for feature in new_features]},
-                    padding=self.padding,
-                    max_length=self.max_length,
-                    return_tensors=return_tensors,
-                )['input_ids']
-
-        return features
+        return batch
 
 
 class Pooler:
@@ -759,14 +320,14 @@ class AngleTrainer(Trainer):
 
     :param pooler: Pooler. Required
     :param loss_kwargs: Optional[Dict]. Default None.
-    :param dataset_format: str. Default DatasetFormats.A
+    :param dataset_format: str. Default 'A'
     :param teacher_name_or_path: Optional[str]. For distribution alignment.
     :param **kwargs: other parameters of Trainer.
     """
     def __init__(self,
                  pooler: Pooler,
                  loss_kwargs: Optional[Dict] = None,
-                 dataset_format: str = DatasetFormats.A,
+                 dataset_format: str = 'A',
                  teacher_name_or_path: Optional[str] = None,
                  teacher_pooling_strategy: str = 'cls',
                  pad_token_id: int = 0,
@@ -784,8 +345,6 @@ class AngleTrainer(Trainer):
         if teacher_name_or_path is not None:
             logger.info('Teacher detected! '
                         'please ensure the teacher has the same tokenizer as the backbone model!')
-            assert not check_llm(teacher_name_or_path), ('Currently not support LLMs alignment,'
-                                                         f' teacher={teacher_name_or_path}')
             teacher_backbone = AutoModel.from_pretrained(
                 teacher_name_or_path,
                 trust_remote_code=True,
@@ -879,14 +438,14 @@ class AngleESETrainer(AngleTrainer):
 
     :param pooler: Pooler. Required
     :param loss_kwargs: Optional[Dict]. Default None.
-    :param dataset_format: str. Default DatasetFormats.A
+    :param dataset_format: str. Default 'A'
     :param teacher_name_or_path: Optional[str]. For distribution alignment.
     :param **kwargs: other parameters of Trainer.
     """
     def __init__(self,
                  pooler: Pooler,
                  loss_kwargs: Optional[Dict] = None,
-                 dataset_format: str = DatasetFormats.A,
+                 dataset_format: str = 'A',
                  teacher_name_or_path: Optional[str] = None,
                  ese_kl_temperature: float = 1.0,
                  ese_compression_size: int = 128,
@@ -1050,7 +609,7 @@ class AngleLoss:
 
         :return: torch.Tensor. Loss.
         """
-        if self.dataset_format == DatasetFormats.A:
+        if self.dataset_format == 'A':
             loss = 0.
             if self.cosine_w > 0:
                 loss += self.cosine_w * cosine_loss(labels, outputs, self.cosine_tau)
@@ -1059,20 +618,27 @@ class AngleLoss:
             if self.angle_w > 0:
                 loss += self.angle_w * angle_loss(labels, outputs, self.angle_tau,
                                                   pooling_strategy=self.angle_pooling_strategy)
-        elif self.dataset_format == DatasetFormats.B:
+        elif self.dataset_format == 'B':
+            # Format B: query, positive (no negative)
+            query = outputs[::2]
+            positive = outputs[1::2]
+            loss = contrastive_with_negative_loss(query, positive, neg=None, tau=self.ibn_tau)
+            
+        elif self.dataset_format == 'C':
+            # Format C: query, positive, negative
             if int(self.cln_w) == 0:
                 logger.info('`cln_w` is set to zero. Contrastive learning with hard negative is disabled. '
                             'Please manually check whether it is correct.')
-            # text,positive,negative
-            text = outputs[::3]
+            
+            query = outputs[::3]
             positive = outputs[1::3]
             negative = outputs[2::3]
-            assert text.shape == positive.shape == negative.shape, f'text.shape={text.shape}, postive.shape={positive.shape}, negative.shape={negative.shape}'  # NOQA
+            assert query.shape == positive.shape == negative.shape, f'query.shape={query.shape}, positive.shape={positive.shape}, negative.shape={negative.shape}'  # NOQA
 
-            _, fea_dim = text.shape
-            positive_inputs = torch.stack((text, positive), dim=1).reshape(-1, fea_dim)  # zip(text, positive)
+            _, fea_dim = query.shape
+            positive_inputs = torch.stack((query, positive), dim=1).reshape(-1, fea_dim)  # zip(query, positive)
             positive_labels = torch.ones_like(positive_inputs[:, :1]).long()
-            negative_inputs = torch.stack((text, negative), dim=1).reshape(-1, fea_dim)  # zip(text, negative)
+            negative_inputs = torch.stack((query, negative), dim=1).reshape(-1, fea_dim)  # zip(query, negative)
             negative_labels = torch.zeros_like(negative_inputs[:, :1]).long()
             combined_inputs = torch.cat((positive_inputs, negative_inputs), dim=0)
             combined_labels = torch.cat((positive_labels, negative_labels), dim=0)
@@ -1081,9 +647,9 @@ class AngleLoss:
             # contrastive learning loss
             cll = 0.
             if self.ibn_w > 0:
-                cll += self.ibn_w * contrastive_with_negative_loss(text, positive, tau=self.ibn_tau)
+                cll += self.ibn_w * contrastive_with_negative_loss(query, positive, tau=self.ibn_tau)
             if self.cln_w > 0:
-                cll += self.cln_w * contrastive_with_negative_loss(text, positive, negative, tau=self.ibn_tau)
+                cll += self.cln_w * contrastive_with_negative_loss(query, positive, negative, tau=self.ibn_tau)
             if cll > 0:
                 loss += cll / 2
             # angle loss
@@ -1093,11 +659,6 @@ class AngleLoss:
             # cosine loss
             if self.cosine_w > 0:
                 loss += self.cosine_w * cosine_loss(combined_labels, combined_inputs, self.cosine_tau)
-
-        elif self.dataset_format == DatasetFormats.C:
-            text = outputs[::2]
-            positive = outputs[1::2]
-            loss = contrastive_with_negative_loss(text, positive, neg=None, tau=self.ibn_tau)
         else:
             raise NotImplementedError
         return loss
@@ -1118,7 +679,7 @@ class AnglE(AngleBase):
     :param apply_lora: Optional[bool]. Whether apply lora. Default None.
     :param train_mode: bool. Whether load for training. Default True.
     :param load_kbit: Optional[int]. Specify kbit training from [4, 8, 16]. Default None.
-    :param is_llm: Optional[bool]. Whether the model is llm. Default None.
+    :param is_llm: Optional[bool]. Whether the model is llm. Must be set manually. Default None.
     :param pretrained_model_path: Optional[str]. Default None.
     :param pretrained_lora_path: Optional[str]. Default None.
     :param torch_dtype: Optional[torch.dtype]. Specify torch_dtype. Default None.
@@ -1132,7 +693,7 @@ class AnglE(AngleBase):
     :param **kwargs: Any.
     """  # NOQA
     cfg_file_name = 'angle_config.json'
-    special_columns = ['labels', 'seperate_ids', 'extra', 'mask_target_labels']
+    special_columns = ['labels']
 
     def __init__(self,
                  model_name_or_path: str,
@@ -1162,26 +723,19 @@ class AnglE(AngleBase):
         self.load_kbit = load_kbit
         self.is_llm = is_llm
         self.load_mlm_model = load_mlm_model
-        if device:
+        if device is not None:
             self.device = device
         else:
             self.device = set_device()
-        if is_llm is None:
-            self.is_llm = check_llm(model_name_or_path)
-            if self.is_llm:
-                logger.info('LLM detected, automatically set is_llm=True.'
-                            'If it is wrong, you can manually set `is_llm`.')
+
         if self.is_llm and self.pooling_strategy != 'last':
-            logger.info(f'🚨 LLM detected, but pooling strategy is specified to {self.pooling_strategy}.'
-                        'Please check whether it is correct. It is recommended to use `last` pooling strategy for LLM.')
+            logger.info(f'🚨 LLM mode is enabled, but pooling strategy is specified to {self.pooling_strategy}.'
+                        'Please check whether it is a correct behavior.')
 
         self.apply_lora = apply_lora
         if self.apply_lora is None:
-            if self.is_llm:
-                self.apply_lora = True
-                logger.info('LLM detected, automatically set apply_lora=True.'
-                            'If it is wrong, you can manually set `apply_lora`.')
             if pretrained_lora_path is not None:
+                logger.info('pretrained_lora_path is specified, automatically set apply_lora=True.')
                 self.apply_lora = True
 
         if self.device == 'cuda':
@@ -1440,10 +994,6 @@ class AnglE(AngleBase):
         with open(fpath, 'w', encoding='utf-8') as writer:
             json.dump(self.__cfg, writer, ensure_ascii=False, indent=2)
 
-    def detect_dataset_format(self, ds: Dataset):
-        for obj in ds:
-            return obj['extra']['dataset_format']
-
     def fit(self,
             train_ds: Dataset,
             valid_ds: Optional[Dataset] = None,
@@ -1461,6 +1011,7 @@ class AnglE(AngleBase):
             save_total_limit: int = 1,
             gradient_accumulation_steps: int = 1,
             fp16: Optional[bool] = None,
+            bf16: Optional[bool] = None,
             argument_kwargs: Optional[Dict] = None,
             trainer_kwargs: Optional[Dict] = None,
             loss_kwargs: Optional[Dict] = None,
@@ -1469,15 +1020,17 @@ class AnglE(AngleBase):
             push_to_hub: bool = False,
             hub_model_id: Optional[str] = None,
             hub_private_repo: bool = True,
-            coword_random_mask_rate: float = 0.,
-            padding: str = 'longest'):
+            padding: str = 'longest',
+            text_prompt: Optional[str] = None,
+            query_prompt: Optional[str] = None,
+            doc_prompt: Optional[str] = None):
         """
         Fit using AnglE.
 
-        :param train_ds: Dataset. tokenized train dataset. Required.
-        :param valid_ds: Optional[Dataset]. tokenized valid dataset. Default None.
-        :param valid_ds_for_callback: Optional[Dataset]. tokenized valid dataset for callback use.
-            The dataset format should be `DatasetFormats.A`. The spearmans' correlation will be computed
+        :param train_ds: Dataset. Raw train dataset (not tokenized). Required.
+        :param valid_ds: Optional[Dataset]. Raw valid dataset (not tokenized). Default None.
+        :param valid_ds_for_callback: Optional[Dataset]. Raw valid dataset for callback use (not tokenized).
+            The dataset format should be format A. The spearmans' correlation will be computed
             after each epoch training and the best model will be saved. Default None.
         :param batch_size: int. Default 32.
         :param output_dir: Optional[str]. save dir. Default None.
@@ -1492,6 +1045,7 @@ class AnglE(AngleBase):
         :param save_total_limit: int. Default 10.
         :param gradient_accumulation_steps: int. Default 1.
         :param fp16: Optional[bool]. Default None.
+        :param bf16: Optional[bool]. Default None.
         :param argument_kwargs: Optional[Dict]. kwargs for TrainingArguments.
             refer to: https://huggingface.co/docs/transformers/v4.37.0/en/main_classes/trainer#transformers.TrainingArguments
         :param trainer_kwargs: Optional[Dict]. kwargs for AngleTrainer.
@@ -1501,8 +1055,10 @@ class AnglE(AngleBase):
         :param push_to_hub: bool, whether push to hub.
         :param hub_model_id: Optional[str], hub model id.
         :param hub_private_repo: bool, whether push to private repo.
-        :param coword_random_mask_rate: float, random mask common token rate. Default 0.
         :param padding: str, padding strategy of tokenizer. Default 'longest'.
+        :param text_prompt: Optional[str], prompt for text1 and text2 (format A only). Default None.
+        :param query_prompt: Optional[str], prompt template for query. Default None.
+        :param doc_prompt: Optional[str], prompt template for documents (positive/negative). Default None.
         """  # NOQA
         if output_dir is not None:
             os.makedirs(output_dir, exist_ok=True)
@@ -1511,12 +1067,10 @@ class AnglE(AngleBase):
         # save tokenizer
         self.tokenizer.save_pretrained(output_dir)
 
-        if self.gpu_count > 1:
-            gradient_accumulation_steps = gradient_accumulation_steps // self.gpu_count
-        if fp16 is None and self.is_llm:
-            fp16 = True
-        else:
+        if fp16 is None:
             fp16 = False
+        if bf16 is None:
+            bf16 = False
 
         # init argument_kwargs
         if argument_kwargs is None:
@@ -1533,16 +1087,16 @@ class AnglE(AngleBase):
 
         callbacks = None
         if valid_ds_for_callback is not None:
-            # check format
-            for obj in valid_ds_for_callback:
-                if obj['extra']['dataset_format'] != DatasetFormats.A:
-                    raise ValueError('Currently only support evaluation for DatasetFormats.A.')
-                break
+            # check format - must be format A
+            detected_format = detect_dataset_format(valid_ds_for_callback)
+            if detected_format != 'A':
+                raise ValueError('Currently only support evaluation for format A (text1, text2, label).')
             best_ckpt_dir = None
             if output_dir is not None:
                 best_ckpt_dir = os.path.join(output_dir, 'best-checkpoint')
-            evaluate_callback = EvaluateCallback(self, valid_ds_for_callback,
-                                                 partial(self.evaluate, batch_size=batch_size),
+            evaluate_callback = EvaluateCallback(self,
+                                                 valid_ds_for_callback,
+                                                 partial(self.evaluate, batch_size=batch_size, prompt=text_prompt),
                                                  save_dir=best_ckpt_dir,
                                                  push_to_hub=push_to_hub,
                                                  hub_model_id=hub_model_id,
@@ -1551,14 +1105,11 @@ class AnglE(AngleBase):
             argument_kwargs['push_to_hub'] = False
             callbacks = [evaluate_callback]
 
-        if coword_random_mask_rate > 0:
-            logger.info(f'Trained with random mask common tokens.'
-                        f'coword_random_mask_rate={coword_random_mask_rate}')
         CustomTrainer = AngleESETrainer if apply_ese else AngleTrainer
         trainer = CustomTrainer(
             pooler=self.pooler,
             model=self.backbone,
-            dataset_format=self.detect_dataset_format(train_ds),
+            dataset_format=detect_dataset_format(train_ds),
             train_dataset=train_ds,
             eval_dataset=valid_ds,
             loss_kwargs=loss_kwargs,
@@ -1570,6 +1121,7 @@ class AnglE(AngleBase):
                 num_train_epochs=epochs,
                 learning_rate=learning_rate,
                 fp16=fp16,
+                bf16=bf16,
                 logging_steps=logging_steps,
                 save_steps=save_steps,
                 save_strategy=save_strategy,
@@ -1589,7 +1141,10 @@ class AnglE(AngleBase):
                 return_tensors="pt",
                 max_length=self.max_length,
                 filter_duplicate=filter_duplicate,
-                coword_random_mask_rate=coword_random_mask_rate,
+                text_prompt=text_prompt,
+                query_prompt=query_prompt,
+                doc_prompt=doc_prompt,
+                dataset_format=detect_dataset_format(train_ds),
             ),
             model_kwargs=self.model_kwargs,
             **trainer_kwargs
@@ -1602,19 +1157,21 @@ class AnglE(AngleBase):
             trainer.push_to_hub()
         self.backbone.save_pretrained(output_dir)
 
-    def evaluate(self, data: Dataset, batch_size: int = 32, metric: str = 'spearman_cosine') -> float:
+    def evaluate(self, ds: Dataset, batch_size: int = 32, metric: str = 'spearman_cosine', prompt: Optional[str] = None) -> float:
         """ evaluate
 
-        :param data: Dataset, DatasetFormats.A is required
+        :param data: Dataset, format A is required
         :param batch_size: int. Default 32.
         :param metric: str. Default 'spearman_cosine'.
 
         :return: float.
         """
+        if prompt is not None:
+            ds = ds.map(lambda x: {"text1": prompt.format(text=x["text1"]), "text2": prompt.format(text=x["text2"])}, batched=True)
         return CorrelationEvaluator(
-            text1=data['text1'],
-            text2=data['text2'],
-            labels=data['label'],
+            text1=ds['text1'],
+            text2=ds['text2'],
+            labels=ds['label'],
             batch_size=batch_size,
         )(self)[metric]
 
@@ -1629,8 +1186,9 @@ class AnglE(AngleBase):
         self.backbone.encoder.layer = self.backbone.encoder.layer[:layer_index]
         return self
 
+    @torch.no_grad()
     def encode(self,
-               inputs: Union[List[str], Tuple[str], List[Dict], str],
+               inputs: Union[List[str], Tuple[str], str],
                max_length: Optional[int] = None,
                to_numpy: bool = True,
                embedding_start: int = 0,
@@ -1655,14 +1213,11 @@ class AnglE(AngleBase):
         """
         self.backbone.eval()
 
-        if device is None:
-            device = self.device
+        device = device or self.backbone.device
         if not isinstance(inputs, (tuple, list)):
             inputs = [inputs]
         if prompt is not None:
-            for i, obj in enumerate(inputs):
-                assert isinstance(obj, dict), 'The prompt has been set, please pass a dict like {"prompt_key": "text"}'
-                inputs[i] = prompt.format(**obj)
+            inputs = [prompt.format(text=text) for text in inputs]
 
         tok = self.tokenizer(
             inputs,
@@ -1671,10 +1226,11 @@ class AnglE(AngleBase):
             truncation=True,
             return_tensors='pt')
         tok.to(device)
-        with torch.no_grad():
-            output = self.pooler(tok,
-                                 embedding_start=embedding_start,
-                                 embedding_size=embedding_size)
+
+        output = self.pooler(tok,
+                             embedding_start=embedding_start,
+                             embedding_size=embedding_size)
+
         if normalize_embedding:
             output = nn.functional.normalize(output, p=2, dim=-1)
         if to_numpy:

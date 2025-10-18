@@ -12,7 +12,7 @@ Step 1: Data preparation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
-Clean pubmed data from the `qiaojin/PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA>`_ dataset, and prepare it into AnglE's `DatasetFormats.C <https://angle.readthedocs.io/en/latest/notes/training.html#data-prepration>`_ format.
+Clean pubmed data from the `qiaojin/PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA>`_ dataset, and prepare it into AnglE's `Format C <https://angle.readthedocs.io/en/latest/notes/training.html#data-preparation>`_ format (query, positive, negative).
 
 We have already processed the data and made it available on HuggingFace: `WhereIsAI/medical-triples <https://huggingface.co/datasets/WhereIsAI/medical-triples/viewer/all_pubmed_en_v1>`_. You can use this processed dataset for this tutorial.
 
@@ -35,7 +35,11 @@ Here's an example of training a BERT-base model:
 
 .. code-block:: bash
 
-    WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=1,2,3 torchrun --nproc_per_node=3 --master_port=1234 -m angle_emb.angle_trainer \
+    CUDA_VISIBLE_DEVICES=1,2,3 WANDB_MODE=disabled accelerate launch \
+    --multi_gpu \
+    --num_processes 3 \
+    --main_process_port 1234 \
+    -m angle_emb.angle_trainer \
     --train_name_or_path WhereIsAI/medical-triples \
     --train_subset_name all_pubmed_en_v1 \
     --save_dir ckpts/pubmedbert-medical-base-v1 \
@@ -62,8 +66,13 @@ And here's another example of training a BERT-large model:
 
 .. code-block:: bash
 
-    WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=1,2,3 torchrun --nproc_per_node=3 --master_port=1234 -m angle_emb.angle_trainer \
+    CUDA_VISIBLE_DEVICES=1,2,3 WANDB_MODE=disabled accelerate launch \
+    --multi_gpu \
+    --num_processes 3 \
+    --main_process_port 1234 \
+    -m angle_emb.angle_trainer \
     --train_name_or_path WhereIsAI/medical-triples \
+    --column_rename_mapping "text:query" \
     --train_subset_name all_pubmed_en_v1 \
     --save_dir ckpts/uae-medical-large-v1 \
     --model_name_or_path WhereIsAI/UAE-Large-V1 \
@@ -79,7 +88,7 @@ And here's another example of training a BERT-large model:
     --warmup_steps 50 \
     --batch_size 32 \
     --seed 42 \
-    --gradient_accumulation_steps 3 \
+    --gradient_accumulation_steps 2 \
     --push_to_hub 1 --hub_model_id pubmed-angle-large-en --hub_private_repo 1 \
     --epochs 1 \
     --fp16 1
@@ -90,7 +99,7 @@ Step 3: Evaluate the model
 
 AnglE provides a `CorrelationEvaluator <https://angle.readthedocs.io/en/latest/notes/evaluation.html#spearman-and-pearson-correlation>`_ to evaluate the performance of sentence embeddings.
 
-For convenience, we have processed the `PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA/viewer/pqa_labeled>`_ pqa_labeled subset data into the `DatasetFormats.A` format and made it available in `WhereIsAI/pubmedqa-test-angle-format-a <https://huggingface.co/datasets/WhereIsAI/pubmedqa-test-angle-format-a>`_ for evaluation purposes.
+For convenience, we have processed the `PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA/viewer/pqa_labeled>`_ pqa_labeled subset data into the Format A format (text1, text2, label) and made it available in `WhereIsAI/pubmedqa-test-angle-format-a <https://huggingface.co/datasets/WhereIsAI/pubmedqa-test-angle-format-a>`_ for evaluation purposes.
 
 The following code shows how to evaluate the trained `pubmed-angle-base-en` model:
 

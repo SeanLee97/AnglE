@@ -10,7 +10,7 @@ import random
 import numpy as np
 import torch
 from datasets import load_dataset, Dataset, DatasetDict
-from angle_emb import AnglE, AngleDataTokenizer
+from angle_emb import AnglE
 
 
 parser = argparse.ArgumentParser()
@@ -253,9 +253,9 @@ if args.mode == 'train':
                       train_mode=True)
     
     print('>>> PROMPT:', PROMPT)
-    train_ds = dataset['train'].shuffle().map(AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=PROMPT), num_proc=args.workers)
+    train_ds = dataset['train'].shuffle()
     if args.do_eval:
-        valid_ds = dataset['validation'].map(AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=PROMPT), num_proc=args.workers)
+        valid_ds = dataset['validation']
     else:
         valid_ds = None
     
@@ -270,6 +270,7 @@ if args.mode == 'train':
         eval_steps=args.eval_steps if args.do_eval == 1 and args.eval_steps is not None else None,
         warmup_steps=args.warmup_steps,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
+        text_prompt=PROMPT if PROMPT else None,
         loss_kwargs={
             'w1': args.w1,
             'w2': args.w2,
@@ -290,9 +291,9 @@ elif args.mode == 'test':
         load_kbit=args.load_kbit,
         max_length=args.maxlen,
     ).cuda()
-    test_ds = dataset['test'].map(AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=PROMPT), num_proc=args.workers)
-    corrcoef, accuracy = model.evaluate(test_ds, batch_size=args.batch_size, device=model.device)
-    print(f'corrcoef: {corrcoef}, accuracy: {accuracy}')
+    test_ds = dataset['test']
+    corrcoef = model.evaluate(test_ds, batch_size=args.batch_size)
+    print(f'corrcoef: {corrcoef}')
 elif args.mode == 'test_zhnli':
     model = AnglE.from_pretrained(
         args.model_name,
@@ -305,9 +306,9 @@ elif args.mode == 'test_zhnli':
     all_corrcoef = []
     for dataset in ['sohu-dc', 'sohu-dd', 'PAWSX', 'STS-B', 'LCQMC', 'ATEC', 'BQ']:
         print(f'eval {dataset}...')
-        test_ds = zh_nli_ds[dataset].map(AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=PROMPT), num_proc=args.workers)
-        corrcoef, accuracy = model.evaluate(test_ds, batch_size=args.batch_size, device=model.device)
-        print(f'{dataset}: corrcoef: {corrcoef}, accuracy: {accuracy}')
+        test_ds = zh_nli_ds[dataset]
+        corrcoef = model.evaluate(test_ds, batch_size=args.batch_size)
+        print(f'{dataset}: corrcoef: {corrcoef}')
         all_corrcoef.append(corrcoef)
     print('avg corrcoef:', sum(all_corrcoef)/len(all_corrcoef))
 else:

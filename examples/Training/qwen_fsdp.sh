@@ -1,0 +1,28 @@
+CUDA_VISIBLE_DEVICES=0,1,2,3 WANDB_MODE=disabled accelerate launch \
+--multi_gpu \
+--num_processes 4 \
+--main_process_port 2345 \
+--config_file ../FSDP/fsdp_config.yaml \
+-m angle_emb.angle_trainer \
+--gradient_checkpointing 1 \
+--use_reentrant 0 \
+--model_name_or_path Qwen/Qwen3-0.6B \
+--torch_dtype "bfloat16" \
+--is_llm 1 \
+--apply_lora 1 --lora_r 32 --lora_alpha 32 \
+--maxlen 312 \
+--train_name_or_path SeanLee97/nli_for_simcse \
+--save_dir ckpts/qwen-nli \
+--column_rename_mapping "text:query" \
+--query_prompt "query: {text}" \
+--doc_prompt "doc: {text}" \
+--learning_rate 1e-4 \
+--pooling_strategy last \
+--epochs 1 \
+--batch_size 16 \
+--logging_steps 10 \
+--gradient_accumulation_steps 2 \
+--ibn_w 1.0 \
+--cln_w 1.0 \
+--angle_w 0.02 \
+--bf16 1

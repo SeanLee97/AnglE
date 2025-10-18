@@ -1,7 +1,7 @@
 🫡 Citation
 ===================
 
-You are welcome to use our code and pre-trained models. If you use our code and pre-trained models, please support us by citing our work as follows:
+If you use our code and pre-trained models, please support us by citing our work as follows:
 
 .. code-block:: bibtex
 

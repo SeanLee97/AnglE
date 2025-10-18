@@ -17,9 +17,7 @@ Other installation methods, please refer to the `Installation` section.
 ⌛ Infer BERT-based Model
 ------------------------------------
 
-1) **With Prompts**: You can specify a prompt with `prompt=YOUR_PROMPT` in `encode` method.
-If set a prompt, the inputs should be a list of dict or a single dict with key `text`, where `text` is the placeholder in the prompt for the input text. 
-You can use other placeholder names. We provide a set of predefined prompts in `Prompts` class, you can check them via `Prompts.list_prompts()`.
+1) **With Prompts**: You can specify a prompt with `prompt=YOUR_PROMPT` in `encode` method. The prompt should use `{text}` as the placeholder. We provide a set of predefined prompts in `Prompts` class, you can check them via `Prompts.list_prompts()`.
 
 
 .. code-block:: python
@@ -30,8 +28,7 @@ You can use other placeholder names. We provide a set of predefined prompts in `
 
     angle = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').cuda()
     # For retrieval tasks, we use `Prompts.C` as the prompt for the query when using UAE-Large-V1 (no need to specify prompt for documents).
-    # When specify prompt, the inputs should be a list of dict with key 'text'
-    qv = angle.encode({'text': 'what is the weather?'}, to_numpy=True, prompt=Prompts.C)
+    qv = angle.encode(['what is the weather?'], to_numpy=True, prompt=Prompts.C)
     doc_vecs = angle.encode([
         'The weather is great!',
         'it is rainy today.',
@@ -68,7 +65,7 @@ You can use other placeholder names. We provide a set of predefined prompts in `
 ⌛ Infer LLM-based Models
 ------------------------------------
 
-If the pretrained weight is a LoRA-based model, you need to specify the backbone via `model_name_or_path` and specify the LoRA path via the `pretrained_lora_path` in `from_pretrained` method. 
+If the pretrained weight is a LoRA-based model, you need to specify the backbone via `model_name_or_path` and specify the LoRA path via the `pretrained_lora_path` in `from_pretrained` method. **You must manually set `is_llm=True`** for LLM models.
 
 .. code-block:: python
 
@@ -83,9 +80,9 @@ If the pretrained weight is a LoRA-based model, you need to specify the backbone
                                   torch_dtype=torch.float16).cuda()
     print('All predefined prompts:', Prompts.list_prompts())
     doc_vecs = angle.encode([
-        {'text': 'The weather is great!'},
-        {'text': 'The weather is very good!'},
-        {'text': 'i am going to bed'}
+        'The weather is great!',
+        'The weather is very good!',
+        'i am going to bed'
     ], prompt=Prompts.A)
 
     for i, dv1 in enumerate(doc_vecs):
@@ -106,10 +103,11 @@ Specify `apply_billm` and `billm_model_class` to load and infer billm models
     os.environ['BiLLM_START_INDEX'] = '31'
 
     import torch
-    from angle_emb import AnglE, Prompts
+    from angle_emb import AnglE
     from angle_emb.utils import cosine_similarity
 
     # specify `apply_billm` and `billm_model_class` to load billm models
+    # You must manually set is_llm=True for LLM models
     angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf',
                                   pretrained_lora_path='SeanLee97/bellm-llama-7b-nli',
                                   pooling_strategy='last',
@@ -119,9 +117,9 @@ Specify `apply_billm` and `billm_model_class` to load and infer billm models
                                   torch_dtype=torch.float16).cuda()
 
     doc_vecs = angle.encode([
-        {'text': 'The weather is great!'},
-        {'text': 'The weather is very good!'},
-        {'text': 'i am going to bed'}
+        'The weather is great!',
+        'The weather is very good!',
+        'i am going to bed'
     ], prompt='The representative word for sentence {text} is:"')
 
     for i, dv1 in enumerate(doc_vecs):

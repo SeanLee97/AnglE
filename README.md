@@ -19,14 +19,6 @@
 </a>
 
 
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/angle-optimized-text-embeddings/semantic-textual-similarity-on-sick-r-1)](https://paperswithcode.com/sota/semantic-textual-similarity-on-sick-r-1?p=angle-optimized-text-embeddings)
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/angle-optimized-text-embeddings/semantic-textual-similarity-on-sts16)](https://paperswithcode.com/sota/semantic-textual-similarity-on-sts16?p=angle-optimized-text-embeddings)
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/angle-optimized-text-embeddings/semantic-textual-similarity-on-sts15)](https://paperswithcode.com/sota/semantic-textual-similarity-on-sts15?p=angle-optimized-text-embeddings)
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/angle-optimized-text-embeddings/semantic-textual-similarity-on-sts14)](https://paperswithcode.com/sota/semantic-textual-similarity-on-sts14?p=angle-optimized-text-embeddings)
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/angle-optimized-text-embeddings/semantic-textual-similarity-on-sts13)](https://paperswithcode.com/sota/semantic-textual-similarity-on-sts13?p=angle-optimized-text-embeddings)
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/angle-optimized-text-embeddings/semantic-textual-similarity-on-sts12)](https://paperswithcode.com/sota/semantic-textual-similarity-on-sts12?p=angle-optimized-text-embeddings)
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/angle-optimized-text-embeddings/semantic-textual-similarity-on-sts-benchmark)](https://paperswithcode.com/sota/semantic-textual-similarity-on-sts-benchmark?p=angle-optimized-text-embeddings)
-
 📢 **Train/Infer Powerful Sentence Embeddings with AnglE.**
 This library is from the paper: [AnglE: Angle-optimized Text Embeddings](https://arxiv.org/abs/2309.12871). It allows for training state-of-the-art BERT/LLM-based sentence embeddings with just a few lines of code. AnglE is also a general sentence embedding inference framework, allowing for infering a variety of transformer-based sentence embeddings.
 
@@ -39,7 +31,7 @@ This library is from the paper: [AnglE: Angle-optimized Text Embeddings](https:/
 - ☕️ Espresso loss (ICLR 2025, a.k.a 2DMSE, detail: [README_ESE](README_ESE.md))
 
 **Backbones**:
-- BERT-based models (BERT, RoBERTa, ELECTRA, ALBERT, etc.)
+- BERT-based models (BERT, RoBERTa, ModernBERT, etc.)
 - LLM-based models (LLaMA, Mistral, Qwen, etc.)
 - Bi-directional LLM-based models (LLaMA, Mistral, Qwen, OpenELMo, etc.. refer to: https://github.com/WhereIsAI/BiLLM)
 
@@ -94,14 +86,14 @@ LLM-based models:
 ### ⬇️ Installation
 
 ```bash
-python -m pip install -U angle-emb
+pip install -U angle-emb
 ```
 
 ### ⌛ Infer BERT-based Model
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1QJcA2Mvive4pBxWweTpZz9OgwvE42eJZ?usp=sharing)
 
 
-1) **With Prompts**: You can specify a prompt with `prompt=YOUR_PROMPT` in `encode` method. If set a prompt, the inputs should be a list of dict or a single dict with key `text`, where `text` is the placeholder in the prompt for the input text. You can use other placeholder names. We provide a set of predefined prompts in `Prompts` class, you can check them via `Prompts.list_prompts()`.
+1) **With Prompts**: You can specify a prompt with `prompt=YOUR_PROMPT` in `encode` method. The prompt should use `{text}` as the placeholder. We provide a set of predefined prompts in `Prompts` class, you can check them via `Prompts.list_prompts()`.
 
 ```python
 from angle_emb import AnglE, Prompts
@@ -110,8 +102,7 @@ from angle_emb.utils import cosine_similarity
 
 angle = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').cuda()
 # For retrieval tasks, we use `Prompts.C` as the prompt for the query when using UAE-Large-V1 (no need to specify prompt for documents).
-# When specify prompt, the inputs should be a list of dict with key 'text'
-qv = angle.encode({'text': 'what is the weather?'}, to_numpy=True, prompt=Prompts.C)
+qv = angle.encode(['what is the weather?'], to_numpy=True, prompt=Prompts.C)
 doc_vecs = angle.encode([
     'The weather is great!',
     'it is rainy today.',
@@ -146,7 +137,7 @@ for i, dv1 in enumerate(doc_vecs):
 ### ⌛ Infer LLM-based Models
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1QJcA2Mvive4pBxWweTpZz9OgwvE42eJZ?usp=sharing)
 
-If the pretrained weight is a LoRA-based model, you need to specify the backbone via `model_name_or_path` and specify the LoRA path via the `pretrained_lora_path` in `from_pretrained` method. 
+If the pretrained weight is a LoRA-based model, you need to specify the backbone via `model_name_or_path` and specify the LoRA path via the `pretrained_lora_path` in `from_pretrained` method. **You must manually set `is_llm=True`** for LLM models.
 
 ```python
 import torch
@@ -160,9 +151,9 @@ angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf',
                               torch_dtype=torch.float16).cuda()
 print('All predefined prompts:', Prompts.list_prompts())
 doc_vecs = angle.encode([
-    {'text': 'The weather is great!'},
-    {'text': 'The weather is very good!'},
-    {'text': 'i am going to bed'}
+    'The weather is great!',
+    'The weather is very good!',
+    'i am going to bed'
 ], prompt=Prompts.A)
 
 for i, dv1 in enumerate(doc_vecs):
@@ -183,10 +174,11 @@ import os
 os.environ['BiLLM_START_INDEX'] = '31'
 
 import torch
-from angle_emb import AnglE, Prompts
+from angle_emb import AnglE
 from angle_emb.utils import cosine_similarity
 
 # specify `apply_billm` and `billm_model_class` to load billm models
+# You must manually set is_llm=True for LLM models
 angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf',
                               pretrained_lora_path='SeanLee97/bellm-llama-7b-nli',
                               pooling_strategy='last',
@@ -196,9 +188,9 @@ angle = AnglE.from_pretrained('NousResearch/Llama-2-7b-hf',
                               torch_dtype=torch.float16).cuda()
 
 doc_vecs = angle.encode([
-    {'text': 'The weather is great!'},
-    {'text': 'The weather is very good!'},
-    {'text': 'i am going to bed'}
+    'The weather is great!',
+    'The weather is very good!',
+    'i am going to bed'
 ], prompt='The representative word for sentence {text} is:"')
 
 for i, dv1 in enumerate(doc_vecs):
@@ -274,17 +266,17 @@ vecs = model.encode([
 💡 For more details, please refer to the [training and fintuning](https://angle.readthedocs.io/en/latest/notes/training.html).
 
 
-### 🗂️ 1. Data Prepation
+### 🗂️ 1. Data Preparation
 
 We currently support three dataset formats:
 
-1) `DatasetFormats.A`: it is a pair format with three columns: `text1`, `text2`, and `label` (0/1).
+1) **Format A** (Pair with Label): A pair format with three columns: `text1`, `text2`, and `label`. The `label` should be a similarity score (e.g., 0-1).
 
-2) `DatasetFormats.B`: it is a triple format with three columns: `text`, `positive`, and `negative`. `positive` and `negative` store the positive and negative samples of `text`.
+2) **Format B** (Query-Positive): A pair format with two columns: `query` and `positive`. Both `query` and `positive` can be either `str` or `List[str]` (if list, one will be randomly sampled during training).
 
-3) `DatasetFormats.C`: it is a pair format with two columns: `text`, `positive`. `positive` store the positive sample of `text`.
+3) **Format C** (Query-Positive-Negative): A triple format with three columns: `query`, `positive`, and `negative`. All three fields can be either `str` or `List[str]` (if list, one will be randomly sampled during training).
 
-You need to prepare your data into huggingface `datasets.Dataset` in one of the formats in terms of your supervised data.
+You need to prepare your data into huggingface `datasets.Dataset` in one of these formats.
 
 ### 🚂 2. Train with CLI [Recommended]
 
@@ -300,11 +292,32 @@ CUDA_VISIBLE_DEVICES=0 angle-trainer --help
 
 2) Multi-gpu training:
 
-Usage:
+using FSDP:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 --master_port=1234 -m angle_emb.angle_trainer --help
+CUDA_VISIBLE_DEVICES=0,1,2,3 WANDB_MODE=disabled accelerate launch \
+--multi_gpu \
+--num_processes 4 \
+--main_process_port 2345 \
+--config_file examples/FSDP/fsdp_config.yaml \
+-m angle_emb.angle_trainer \
+--gradient_checkpointing 1 \
+--use_reentrant 0 \
+...
 ```
+
+normal training:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 WANDB_MODE=disabled accelerate launch \
+--multi_gpu \
+--num_processes 4 \
+--main_process_port 2345 \
+-m angle_emb.angle_trainer --help
+```
+
+More training examples can be found here [examples/Training](examples/Training)
+
 
 ### 🚂 3. Custom Train
 
@@ -313,26 +326,22 @@ CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 --master_port=1234 -m angle
 
 ```python
 from datasets import load_dataset
-from angle_emb import AnglE, AngleDataTokenizer
+from angle_emb import AnglE
 
 
 # 1. load pretrained model
 angle = AnglE.from_pretrained('SeanLee97/angle-bert-base-uncased-nli-en-v1', max_length=128, pooling_strategy='cls').cuda()
 
 # 2. load dataset
-# `text1`, `text2`, and `label` are three required columns.
+# `text1`, `text2`, and `label` are three required columns for Format A.
 ds = load_dataset('mteb/stsbenchmark-sts')
 ds = ds.map(lambda obj: {"text1": str(obj["sentence1"]), "text2": str(obj['sentence2']), "label": obj['score']})
 ds = ds.select_columns(["text1", "text2", "label"])
 
-# 3. transform data
-train_ds = ds['train'].shuffle().map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
-valid_ds = ds['validation'].map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
-
-# 4. fit
+# 3. fit (no need to tokenize data in advance, it will be done automatically)
 angle.fit(
-    train_ds=train_ds,
-    valid_ds=valid_ds,
+    train_ds=ds['train'].shuffle(),
+    valid_ds=ds['validation'],
     output_dir='ckpts/sts-b',
     batch_size=32,
     epochs=5,
@@ -344,7 +353,6 @@ angle.fit(
     loss_kwargs={
         'cosine_w': 1.0,
         'ibn_w': 1.0,
-        'cln_w': 1.0,
         'angle_w': 0.02,
         'cosine_tau': 20,
         'ibn_tau': 20,
@@ -354,16 +362,20 @@ angle.fit(
     logging_steps=100
 )
 
-# 5. evaluate
+# 4. evaluate
 corrcoef = angle.evaluate(ds['test'])
 print('Spearman\'s corrcoef:', corrcoef)
 ```
 
 ### 💡 Others
 
-- To enable `llm` training, please specify `--is_llm 1` and configure appropriate LoRA hyperparameters.
+- To enable `llm` training, you **must** manually specify `--is_llm 1` and configure appropriate LoRA hyperparameters.
 - To enable `billm` training, please specify `--apply_billm 1` and configure appropriate `billm_model_class` such as `LLamaForCausalLM` (refer to: https://github.com/WhereIsAI/BiLLM?tab=readme-ov-file#usage).
 - To enable espresso sentence embeddings (ESE), please specify `--apply_ese 1` and configure appropriate ESE hyperparameters via `--ese_kl_temperature float` and `--ese_compression_size integer`.
+- To apply prompts during training:
+  - Use `--text_prompt` for Format A (applies to both text1 and text2)
+  - Use `--query_prompt` for query field in Format B/C
+  - Use `--doc_prompt` for positive/negative fields in Format B/C
 - To convert the trained AnglE models to `sentence-transformers`, please run `python scripts/convert_to_sentence_transformers.py --help` for more details.
 
 
@@ -371,11 +383,11 @@ print('Spearman\'s corrcoef:', corrcoef)
 
 For more details, please refer to the [documentation](https://angle.readthedocs.io/en/latest/notes/training.html#fine-tuning-tips).
 
-1️⃣ If your dataset format is `DatasetFormats.A`, it is recommended to slightly increase the weight for `cosine_w` or slightly decrease the weight for `ibn_w`.
+1️⃣ If your dataset format is **Format A** (text1, text2, label), it is recommended to slightly increase the weight for `cosine_w` or slightly decrease the weight for `ibn_w`.
 
-2️⃣ If your dataset format is `DatasetFormats.B`, it is recommended to set `cosine_w` to 0, and set `angle_w` to a small value like 0.02. Be sure to set `cln_w` and `ibn_w`.
+2️⃣ If your dataset format is **Format B** (query, positive), only `ibn_w` and `ibn_tau` are effective. You don't need to tune other parameters.
 
-3️⃣ If your dataset format is `DatasetFormats.C`, only `ibn_w` and `ibn_tau` are effective. You don't need to tune other parameters.
+3️⃣ If your dataset format is **Format C** (query, positive, negative), it is recommended to set `cosine_w` to 0, and set `angle_w` to a small value like 0.02. Be sure to set `cln_w` and `ibn_w`.
 
 4️⃣ To alleviate information forgetting in fine-tuning, it is better to specify the `teacher_name_or_path`. If the `teacher_name_or_path` equals `model_name_or_path`, it will conduct self-distillation. **It is worth to note that** `teacher_name_or_path` has to have the same tokenizer as `model_name_or_path`. Or it will lead to unexpected results.
 
@@ -389,7 +401,7 @@ For more details, please refer to the [documentation](https://angle.readthedocs.
 
 # 🫡 Citation
 
-You are welcome to use our code and pre-trained models. If you use our code and pre-trained models, please support us by citing our work as follows:
+If you use our code and pre-trained models, please support us by citing our work as follows:
 
 ```bibtex
 @article{li2023angle,
@@ -404,8 +416,9 @@ You are welcome to use our code and pre-trained models. If you use our code and 
 
 | 📅 | Description |
 |----|------|
+| 2025 Jan |  **Major refactoring**: Removed `AngleDataTokenizer`, simplified data pipeline, removed auto-detection of LLM models, added separate prompt parameters |
 | 2024 May 21 |  support Espresso Sentence Embeddings  |
-| 2024 Feb 7 |  support training with only positive pairs (`DatasetFormats.C`)  |
+| 2024 Feb 7 |  support training with only positive pairs (Format C: query, positive)  |
 | 2023 Dec 4 |  Release a universal English sentence embedding model: [WhereIsAI/UAE-Large-V1](https://huggingface.co/WhereIsAI/UAE-Large-V1)  |
 | 2023 Nov 2 |  Release an English pretrained model: `SeanLee97/angle-llama-13b-nli` |
 | 2023 Oct 28 |  Release two chinese pretrained models: `SeanLee97/angle-roberta-wwm-base-zhnli-v1` and `SeanLee97/angle-llama-7b-zhnli-v1`; Add chinese README.md |

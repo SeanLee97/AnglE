@@ -177,19 +177,19 @@ print(vec)
 
 ```python
 from datasets import load_dataset
-from angle_emb import AnglE, AngleDataTokenizer
+from angle_emb import AnglE
 
 # 1. 加载模型
 angle = AnglE.from_pretrained('hfl/chinese-roberta-wwm-ext', max_length=128, pooling_strategy='cls').cuda()
 
-# 2. 加载数据并转换数据
+# 2. 加载数据
 ds = load_dataset('shibing624/nli_zh', 'STS-B')
 ds = ds.rename_column('sentence1', 'text1')
 ds = ds.rename_column('sentence2', 'text2')
 ds = ds.select_columns(["text1", "text2", "label"])
-train_ds = ds['train'].shuffle().map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
-valid_ds = ds['validation'].map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
-test_ds = ds['test'].map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
+train_ds = ds['train'].shuffle()
+valid_ds = ds['validation']
+test_ds = ds['test']
 
 # 3. 训练
 angle.fit(
