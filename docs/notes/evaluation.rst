@@ -18,14 +18,12 @@ These metrics compare predicted similarities against ground truth labels, common
 ----
 
 🎯 Spearman and Pearson Correlation
-====================================
+----------------------------------
 
 Two methods are available for evaluation:
 
-----
-
 Method 1: Using angle.evaluate()
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The simplest way to evaluate your model on a dataset.
 
@@ -57,10 +55,8 @@ The simplest way to evaluate your model on a dataset.
 - ``spearman_cosine``: Spearman correlation with cosine similarity
 - ``pearson_cosine``: Pearson correlation with cosine similarity
 
-----
-
 Method 2: Using CorrelationEvaluator
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 More flexible evaluation with explicit control over inputs.
 
@@ -104,7 +100,7 @@ More flexible evaluation with explicit control over inputs.
 ----
 
 📚 Next Steps
-====================================
+----------------------------------
 
 - Learn how to :doc:`training` models for better performance
 - Follow the complete :doc:`tutorial` for hands-on practice

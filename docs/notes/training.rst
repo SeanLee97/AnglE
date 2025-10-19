@@ -46,10 +46,10 @@ AnglE supports three dataset formats. Choose based on your task:
 ----
 
 🎯 Training Methods
-==================================
+----------------------------------
 
 ⭐ Method 1: CLI Training (Recommended)
-------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Use ``angle-trainer`` to train your models with a simple command-line interface.
 
@@ -85,10 +85,9 @@ use FSDP for bigger batch size:
     ...
 
 see more examples in `examples/FSDP <https://github.com/SeanLee97/AnglE/tree/main/examples/FSDP>`_
-----
 
 📝 Training Examples
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""""""""""""""""""""""""""
 
 **Example 1: BERT-based Model**
 
@@ -181,10 +180,8 @@ Train large language models using Fully Sharded Data Parallel:
     --angle_w 0.02 \
     --bf16 1
 
-----
-
 🐍 Method 2: Python API Training
-------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Train models programmatically using the ``angle_emb`` library.
 
@@ -246,10 +243,10 @@ Train models programmatically using the ``angle_emb`` library.
 ----
 
 ⚙️ Configuration & Hyperparameters
-==================================
+----------------------------------
 
 💡 Loss Weight Parameters
-------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 +----------------+-------------------+---------------------------------------+
 | Parameter      | Default Value     | Description                           |
@@ -264,7 +261,7 @@ Train models programmatically using the ``angle_emb`` library.
 +----------------+-------------------+---------------------------------------+
 
 💡 Temperature Parameters
-------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 +----------------+-------------------+---------------------------------------+
 | Parameter      | Default Value     | Description                           |
@@ -276,10 +273,8 @@ Train models programmatically using the ``angle_emb`` library.
 | ``cosine_tau`` | 20.0              | Temperature for cosine loss           |
 +----------------+-------------------+---------------------------------------+
 
-----
-
 💡 Fine-tuning Tips
-------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Format-specific Recommendations:**
 
@@ -301,10 +296,8 @@ To alleviate information forgetting during fine-tuning:
 - Use same model path for self-distillation
 - **Important:** Teacher and student must use the **same tokenizer**
 
-----
-
 ⚙️ Advanced Features
-------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Training Special Models:**
 
@@ -338,10 +331,8 @@ Convert trained models to ``sentence-transformers`` format:
 
     python scripts/convert_to_sentence_transformers.py --help
 
-----
-
 🔄 Integration with sentence-transformers
---------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Training:**
 
@@ -354,10 +345,8 @@ SentenceTransformers provides an `AnglE loss <https://sbert.net/docs/package_ref
 
 Models trained with ``angle_emb`` can be converted to ``sentence-transformers`` format using the conversion script at ``examples/convert_to_sentence_transformers.py``.
 
-----
-
 📚 Additional Resources
-------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - Check out the complete :doc:`tutorial` for a hands-on example
 - Learn about :doc:`evaluation` methods
