@@ -1,168 +1,224 @@
 🚂 Training and Finetuning
 ============================
 
-There are two types of training methods:
+Train powerful sentence embedding models with AnglE using either CLI or Python API.
 
-1. use the `angle-trainer` cli to train a model in cli mode.
-2. custom training scripts using the `angle` library.
+----
 
-
-🗂️ Data Prepration
+🗂️ Data Preparation
 ----------------------------------
 
-We currently support three dataset formats:
+AnglE supports three dataset formats. Choose based on your task:
 
-1. `DatasetFormats.A`: it is a pair format with three columns: `text1`, `text2`, and `label` (0/1). e.g. `{"text1": "A plane is taking off.", "text2": "An air plane is taking off.",  "label": 1}`
+**Format A: Pair with Label**
+    A pair format with three columns: ``text1``, ``text2``, and ``label``. 
+    The ``label`` should be a similarity score (e.g., 0-1).
+    
+    Example:
+    
+    .. code-block:: json
+    
+        {"text1": "A plane is taking off.", "text2": "An air plane is taking off.", "label": 0.95}
 
-2. `DatasetFormats.B`: it is a triple format with three columns: `text`, `positive`, and `negative`. `positive` and `negative` are the positive and negative samples of `text`. e.g. `{"text": "A person on a horse jumps over a broken down airplane.", "positive": "A person is outdoors, on a horse.", "negative": "A person is at a diner, ordering an omelette."}`
+**Format B: Query-Positive**
+    A pair format with two columns: ``query`` and ``positive``.
+    Both fields can be ``str`` or ``List[str]`` (random sampling for lists).
+    
+    Example:
+    
+    .. code-block:: json
+    
+        {"query": "A person on a horse jumps over a broken down airplane.", "positive": "A person is outdoors, on a horse."}
 
-3. `DatasetFormats.C`: it is a pair format with two columns: `text`, `positive`. `positive` is the positive sample of `text`. e.g.  `{"text": "Two blond women are hugging one another.", "positive": "There are women showing affection."}`
+**Format C: Query-Positive-Negative**
+    A triple format with three columns: ``query``, ``positive``, and ``negative``.
+    All fields can be ``str`` or ``List[str]`` (random sampling for lists).
+    
+    Example:
+    
+    .. code-block:: json
+    
+        {"query": "Two blond women are hugging one another.", "positive": "There are women showing affection.", "negative": "Men are fighting."}
 
-It is required to prepare your data into huggingface `datasets.Dataset` in one of the above formats.
+.. note::
+   All formats use HuggingFace ``datasets.Dataset``.
 
+----
 
-⭐ angle-trainer [recommended]
-----------------------------------
+🎯 Training Methods
+==================================
 
-You can train a powerful sentence embedding model using the `angle-trainer` cli via a few lines of code.
+⭐ Method 1: CLI Training (Recommended)
+------------------------------------------
 
-1. Single gpu training:
+Use ``angle-trainer`` to train your models with a simple command-line interface.
 
-    Usage: 
+**Single GPU Training:**
 
-    .. code-block:: bash
+.. code-block:: bash
 
-        CUDA_VISIBLE_DEVICES=0 angle-trainer --help
+    CUDA_VISIBLE_DEVICES=0 angle-trainer --help
 
-2. Multi-gpu training:
+**Multi-GPU Training:**
 
-    Usage:
+.. code-block:: bash
 
-    .. code-block:: bash
-
-        CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 --master_port=1234 -m angle_emb.angle_trainer --help
-
-
-3. Examples:
-
-    a. BERT-based
-
-    .. code-block:: bash
-
-        WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 torchrun --nproc_per_node=8 --master_port=1234 -m angle_emb.angle_trainer \
-        --train_name_or_path SeanLee97/all_nli_angle_format_a \
-        --save_dir ckpts/bert-base-nli-test \
-        --model_name_or_path google-bert/bert-base-uncased \
-        --pooling_strategy cls \
-        --maxlen 128 \
-        --ibn_w 1.0 \
-        --cln_w 1.0 \
-        --cosine_w 0.0 \
-        --angle_w 0.02 \
-        --angle_tau 20.0 \
-        --learning_rate 5e-5 \
-        --push_to_hub 1 --hub_model_id SeanLee97/bert-base-nli-test-0728 --hub_private_repo 1 \
-        --logging_steps 10 \
-        --save_steps 100 \
-        --warmup_steps 50 \
-        --batch_size 128 \
-        --seed 42 \
-        --gradient_accumulation_steps 16 \
-        --epochs 10 \
-        --fp16 1
-
-
-
-    b. LLaMA-based
-
-    .. code-block:: bash
-
-        BiLLM_START_INDEX=0 WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=2345 -m angle_emb.angle_trainer \
-        --train_name_or_path SeanLee97/all_nli_angle_format_b \
-        --save_dir ckpts/llama7b-nli \
-        --model_name_or_path NousResearch/Llama-2-7b-chat-hf \
-        --pooling_strategy avg \
-        --maxlen 60 \
-        --ibn_w 1.0 \
-        --cln_w 1.0 \
-        --cosine_w 0.0 \
-        --angle_w 0.02 \
-        --learning_rate 2e-4 \
-        --prompt_template "Represent the following sentence for semantic textual similarity: {text}" \
-        --apply_lora 1 --lora_r 64 --lora_alpha 128 --lora_dropout 0.1 \
-        --load_kbit 16 \
-        --is_llm 1 \
-        --push_to_hub 1 --hub_model_id SeanLee97/test-llama7b-nli --hub_private_repo 1 \
-        --logging_steps 5 \
-        --save_steps 50 \
-        --warmup_steps 50 \
-        --batch_size 120 \
-        --gradient_accumulation_steps 32 \
-        --epochs 2 \
-        --fp16 1
+    CUDA_VISIBLE_DEVICES=0,1,2,3 WANDB_MODE=disabled accelerate launch \
+    --multi_gpu \
+    --num_processes 4 \
+    --main_process_port 2345 \
+    -m angle_emb.angle_trainer --help
 
 
+use FSDP for bigger batch size:
 
-    c. BiLLaMA-based
+.. code-block:: bash
 
-    .. code-block:: bash
+    CUDA_VISIBLE_DEVICES=0,1,2,3 WANDB_MODE=disabled accelerate launch \
+    --multi_gpu \
+    --num_processes 4 \
+    --main_process_port 2345 \
+    --config_file examples/FSDP/fsdp_config.yaml \
+    -m angle_emb.angle_trainer \
+    --gradient_checkpointing 1 \
+    --use_reentrant 0 \
+    ...
 
-        BiLLM_START_INDEX=0 WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=2345 -m angle_emb.angle_trainer \
-        --train_name_or_path SeanLee97/all_nli_angle_format_b \
-        --save_dir ckpts/billm-llama7b-nli \
-        --model_name_or_path NousResearch/Llama-2-7b-chat-hf \
-        --pooling_strategy avg \
-        --maxlen 60 \
-        --ibn_w 1.0 \
-        --cln_w 1.0 \
-        --cosine_w 0.0 \
-        --angle_w 0.02 \
-        --learning_rate 2e-4 \
-        --apply_lora 1 --lora_r 64 --lora_alpha 128 --lora_dropout 0.1 \
-        --load_kbit 16 \
-        --is_llm 1 \
-        --apply_billm 1 \
-        --billm_model_class LlamaForCausalLM \
-        --prompt_template "Represent the following sentence for semantic textual similarity: {text}" \
-        --push_to_hub 1 --hub_model_id SeanLee97/test-billm-llama7b-nli --hub_private_repo 1 \
-        --logging_steps 5 \
-        --save_steps 50 \
-        --warmup_steps 50 \
-        --batch_size 120 \
-        --gradient_accumulation_steps 32 \
-        --epochs 2 \
-        --fp16 1
+see more examples in `examples/FSDP <https://github.com/SeanLee97/AnglE/tree/main/examples/FSDP>`_
+----
 
+📝 Training Examples
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-🚂 Custom Train
-----------------------------------
+**Example 1: BERT-based Model**
 
-You can also train a sentence embedding model using the `angle_emb` library. Here is an example:
+Train a BERT model with multi-GPU support:
+
+.. code-block:: bash
+
+    CUDA_VISIBLE_DEVICES=0,1,2,3 WANDB_MODE=disabled accelerate launch \
+    --multi_gpu \
+    --num_processes 4 \
+    --main_process_port 2345 \
+    -m angle_emb.angle_trainer \
+    --model_name_or_path WhereIsAI/UAE-Large-V1 \
+    --train_name_or_path SeanLee97/nli_for_simcse \
+    --save_dir ckpts/uae-nli \
+    --column_rename_mapping "text:query" \
+    --query_prompt "query: {text}" \
+    --doc_prompt "doc: {text}" \
+    --learning_rate 1e-5 \
+    --pooling_strategy cls \
+    --epochs 1 \
+    --batch_size 32 \
+    --logging_steps 10 \
+    --gradient_accumulation_steps 2 \
+    --ibn_w 1.0 \
+    --cln_w 1.0 \
+    --angle_w 0.02 \
+    --fp16 1
+
+**Example 2: ModernBERT-based Model**
+
+Train with ModernBERT architecture:
+
+.. code-block:: bash
+
+    CUDA_VISIBLE_DEVICES=0,1,2,3 WANDB_MODE=disabled accelerate launch \
+    --multi_gpu \
+    --num_processes 4 \
+    --main_process_port 2345 \
+    -m angle_emb.angle_trainer \
+    --model_name_or_path answerdotai/ModernBERT-base \
+    --train_name_or_path SeanLee97/nli_for_simcse \
+    --save_dir ckpts/modernbert-nli \
+    --column_rename_mapping "text:query" \
+    --query_prompt "query: {text}" \
+    --doc_prompt "doc: {text}" \
+    --learning_rate 1e-4 \
+    --pooling_strategy mean \
+    --epochs 1 \
+    --batch_size 128 \
+    --logging_steps 10 \
+    --gradient_accumulation_steps 2 \
+    --ibn_w 1.0 \
+    --cln_w 1.0 \
+    --angle_w 0.02 \
+    --fp16 1
+
+**Example 3: LLM-based Model with FSDP**
+
+Train large language models using Fully Sharded Data Parallel:
+
+.. code-block:: bash
+
+    CUDA_VISIBLE_DEVICES=0,1,2,3 WANDB_MODE=disabled accelerate launch \
+    --multi_gpu \
+    --num_processes 4 \
+    --main_process_port 2345 \
+    --config_file examples/FSDP/fsdp_config.yaml \
+    -m angle_emb.angle_trainer \
+    --gradient_checkpointing 1 \
+    --use_reentrant 0 \
+    --model_name_or_path Qwen/Qwen3-0.6B \
+    --torch_dtype "bfloat16" \
+    --is_llm 1 \
+    --apply_lora 1 --lora_r 32 --lora_alpha 32 \
+    --maxlen 312 \
+    --train_name_or_path SeanLee97/nli_for_simcse \
+    --save_dir ckpts/qwen-nli \
+    --column_rename_mapping "text:query" \
+    --query_prompt "query: {text}" \
+    --doc_prompt "doc: {text}" \
+    --learning_rate 1e-4 \
+    --pooling_strategy last \
+    --epochs 1 \
+    --batch_size 16 \
+    --logging_steps 10 \
+    --gradient_accumulation_steps 2 \
+    --ibn_w 1.0 \
+    --cln_w 1.0 \
+    --angle_w 0.02 \
+    --bf16 1
+
+----
+
+🐍 Method 2: Python API Training
+------------------------------------------
+
+Train models programmatically using the ``angle_emb`` library.
+
+.. image:: https://colab.research.google.com/assets/colab-badge.svg
+    :target: https://colab.research.google.com/drive/1h28jHvv_x-0fZ0tItIMjf8rJGp3GcO5V?usp=sharing
+    :alt: Open In Colab
+
+**Example:**
 
 .. code-block:: python
 
     from datasets import load_dataset
-    from angle_emb import AnglE, AngleDataTokenizer
+    from angle_emb import AnglE
 
+    # Step 1: Load pretrained model
+    angle = AnglE.from_pretrained(
+        'SeanLee97/angle-bert-base-uncased-nli-en-v1',
+        max_length=128,
+        pooling_strategy='cls'
+    ).cuda()
 
-    # 1. load pretrained model
-    angle = AnglE.from_pretrained('SeanLee97/angle-bert-base-uncased-nli-en-v1', max_length=128, pooling_strategy='cls').cuda()
-
-    # 2. load dataset
-    # `text1`, `text2`, and `label` are three required columns.
+    # Step 2: Prepare dataset (Format A example)
     ds = load_dataset('mteb/stsbenchmark-sts')
-    ds = ds.map(lambda obj: {"text1": str(obj["sentence1"]), "text2": str(obj['sentence2']), "label": obj['score']})
+    ds = ds.map(lambda obj: {
+        "text1": str(obj["sentence1"]),
+        "text2": str(obj['sentence2']),
+        "label": obj['score']
+    })
     ds = ds.select_columns(["text1", "text2", "label"])
 
-    # 3. transform data
-    train_ds = ds['train'].shuffle().map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
-    valid_ds = ds['validation'].map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
-    test_ds = ds['test'].map(AngleDataTokenizer(angle.tokenizer, angle.max_length), num_proc=8)
-
-    # 4. fit
+    # Step 3: Train the model
     angle.fit(
-        train_ds=train_ds,
-        valid_ds=valid_ds,
+        train_ds=ds['train'].shuffle(),
+        valid_ds=ds['validation'],
         output_dir='ckpts/sts-b',
         batch_size=32,
         epochs=5,
@@ -172,9 +228,8 @@ You can also train a sentence embedding model using the `angle_emb` library. Her
         warmup_steps=0,
         gradient_accumulation_steps=1,
         loss_kwargs={
-            'cosine_w': 0.0,
+            'cosine_w': 1.0,
             'ibn_w': 1.0,
-            'cln_w': 1.0,
             'angle_w': 0.02,
             'cosine_tau': 20,
             'ibn_tau': 20,
@@ -184,65 +239,127 @@ You can also train a sentence embedding model using the `angle_emb` library. Her
         logging_steps=100
     )
 
-    # 5. evaluate
-    corrcoef, accuracy = angle.evaluate(test_ds, device=angle.device)
-    print('corrcoef:', corrcoef)
+    # Step 4: Evaluate
+    corrcoef = angle.evaluate(ds['test'])
+    print('Spearman\'s corrcoef:', corrcoef)
 
+----
 
-.. image:: https://colab.research.google.com/assets/colab-badge.svg
-    :target: https://colab.research.google.com/drive/1h28jHvv_x-0fZ0tItIMjf8rJGp3GcO5V?usp=sharing
-    :alt: Open In Colab
+⚙️ Configuration & Hyperparameters
+==================================
 
+💡 Loss Weight Parameters
+------------------------------------------
 
++----------------+-------------------+---------------------------------------+
+| Parameter      | Default Value     | Description                           |
++================+===================+=======================================+
+| ``angle_w``    | 0.02              | Weight for angle loss                 |
++----------------+-------------------+---------------------------------------+
+| ``ibn_w``      | 1.0               | Weight for in-batch negative loss     |
++----------------+-------------------+---------------------------------------+
+| ``cln_w``      | 1.0               | Weight for contrastive learning loss  |
++----------------+-------------------+---------------------------------------+
+| ``cosine_w``   | 0.0               | Weight for cosine loss                |
++----------------+-------------------+---------------------------------------+
 
+💡 Temperature Parameters
+------------------------------------------
 
-💡 Hyperparameters
--------------------------
++----------------+-------------------+---------------------------------------+
+| Parameter      | Default Value     | Description                           |
++================+===================+=======================================+
+| ``angle_tau``  | 20.0              | Temperature for angle loss            |
++----------------+-------------------+---------------------------------------+
+| ``ibn_tau``    | 20.0              | Temperature for ibn and cln losses    |
++----------------+-------------------+---------------------------------------+
+| ``cosine_tau`` | 20.0              | Temperature for cosine loss           |
++----------------+-------------------+---------------------------------------+
 
-1. `angle_w`: the weight for angle loss. Default `0.02`
-
-2. `ibn_w`: the weight for in-batch negative loss. Default `1.0`
-
-3. `cln_w`: the weight for contrastive learning with hard negative loss. Default `1.0`
-
-4. `cosine_w`: the weight for cosine loss. Default `0.0`
-
-5. `angle_tau`: the temperature for angle loss. Default `20.0`
-
-6. `ibn_tau`: the temperature for ibn and cln losses. Default `20.0`
-
-7. `cosine_tau`: the temperature for cosine loss. Default `20.0`
-
-
-
+----
 
 💡 Fine-tuning Tips
--------------------------
+------------------------------------------
 
-1. If your dataset format is `DatasetFormats.A`, it is recommended to slightly increase the weight for `cosine_w` or slightly decrease the weight for `ibn_w`.
+**Format-specific Recommendations:**
 
-2. If your dataset format is `DatasetFormats.B`, it is recommended to set `cosine_w` to 0, and set `angle_w` to a small value like 0.02. Be sure to set `cln_w` and `ibn_w`.
++-------------+---------------------------------------------------------------+
+| Format      | Recommendation                                                |
++=============+===============================================================+
+| **Format A**| Increase ``cosine_w`` or decrease ``ibn_w``                  |
++-------------+---------------------------------------------------------------+
+| **Format B**| Only tune ``ibn_w`` and ``ibn_tau``                          |
++-------------+---------------------------------------------------------------+
+| **Format C**| Set ``cosine_w=0``, ``angle_w=0.02``, configure ``cln_w``    |
++-------------+---------------------------------------------------------------+
 
-3. If your dataset format is `DatasetFormats.C`, only `ibn_w` and `ibn_tau` are effective. You don't need to tune other parameters.
+**Prevent Catastrophic Forgetting:**
 
-4. To alleviate information forgetting in fine-tuning, it is better to specify the `teacher_name_or_path`. If the `teacher_name_or_path` equals `model_name_or_path`, it will conduct self-distillation. **Note that** `teacher_name_or_path` has to have the same tokenizer as `model_name_or_path`. Or it will lead to unexpected results.
+To alleviate information forgetting during fine-tuning:
 
+- Set ``teacher_name_or_path`` for knowledge distillation
+- Use same model path for self-distillation
+- **Important:** Teacher and student must use the **same tokenizer**
 
-💡 Fine-tuning and Infering with `sentence-transformers`
----------------------------------------------------------------------------
+----
 
+⚙️ Advanced Features
+------------------------------------------
 
-1. **Training:** SentenceTransformers also provides a implementation of `AnglE loss <https://sbert.net/docs/package_reference/sentence_transformer/losses.html#angleloss>`_ 
-. **But it is partially implemented and may not work well as the official code. We recommend to use the official `angle_emb` for fine-tuning AnglE model.**
+**Training Special Models:**
 
-2. **Infering:** If your model is trained with `angle_emb`, and you want to use it with `sentence-transformers`.  You can convert it to `sentence-transformers` model using the script `examples/convert_to_sentence_transformers.py <https://github.com/SeanLee97/AnglE/blob/main/scripts/convert_to_sentence_transformer.py>`_.
++------------------+-------------------------------------------------------------+
+| Model Type       | CLI Flags                                                   |
++==================+=============================================================+
+| **LLM**          | ``--is_llm 1`` + LoRA parameters                            |
++------------------+-------------------------------------------------------------+
+| **BiLLM**        | ``--apply_billm 1 --billm_model_class LlamaForCausalLM``   |
++------------------+-------------------------------------------------------------+
+| **Espresso**     | ``--apply_ese 1 --ese_kl_temperature 1.0``                  |
++------------------+-------------------------------------------------------------+
 
+**Applying Prompts:**
 
++-------------+-------------------------+-----------------------------------+
+| Format      | Flag                    | Applies To                        |
++=============+=========================+===================================+
+| Format A    | ``--text_prompt``       | Both ``text1`` and ``text2``      |
++-------------+-------------------------+-----------------------------------+
+| Format B/C  | ``--query_prompt``      | ``query`` field                   |
++-------------+-------------------------+-----------------------------------+
+| Format B/C  | ``--doc_prompt``        | ``positive`` and ``negative``     |
++-------------+-------------------------+-----------------------------------+
 
-💡 Others
--------------------------
+**Model Conversion:**
 
-1. To enable `llm` training, please specify `--is_llm 1` and configure appropriate LoRA hyperparameters.
-2. To enable `billm` training, please specify `--apply_billm 1` and configure appropriate `billm_model_class` such as `LLamaForCausalLM` (refer to: https://github.com/WhereIsAI/BiLLM?tab=readme-ov-file#usage).
-3. To enable espresso sentence embeddings (ESE), please specify `--apply_ese 1` and configure appropriate ESE hyperparameters via `--ese_kl_temperature float` and `--ese_compression_size integer`.
-4. To convert the trained AnglE models to `sentence-transformers`, please run `python scripts/convert_to_sentence_transformers.py --help` for more details.
+Convert trained models to ``sentence-transformers`` format:
+
+.. code-block:: bash
+
+    python scripts/convert_to_sentence_transformers.py --help
+
+----
+
+🔄 Integration with sentence-transformers
+--------------------------------------------
+
+**Training:**
+
+SentenceTransformers provides an `AnglE loss <https://sbert.net/docs/package_reference/sentence_transformer/losses.html#angleloss>`_ implementation.
+
+.. warning::
+   The SentenceTransformers implementation is partial. For best results, use the official ``angle_emb`` library.
+
+**Inference:**
+
+Models trained with ``angle_emb`` can be converted to ``sentence-transformers`` format using the conversion script at ``examples/convert_to_sentence_transformers.py``.
+
+----
+
+📚 Additional Resources
+------------------------------------------
+
+- Check out the complete :doc:`tutorial` for a hands-on example
+- Learn about :doc:`evaluation` methods
+- Explore available :doc:`pretrained_models`
+- See :doc:`quickstart` for basic usage

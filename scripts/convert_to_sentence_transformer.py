@@ -5,9 +5,7 @@
 
 import argparse
 
-from sentence_transformers import models
-from sentence_transformers import SentenceTransformer
-
+from sentence_transformers import SentenceTransformer, models
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_name_or_path', type=str, required=True,

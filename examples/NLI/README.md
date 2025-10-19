@@ -80,7 +80,7 @@ CUDA_VISIBLE_DEVICES=0 python eval_nli.py \
 
 **Tuning Tips**:
 
-- prepare data into `DatasetFormats.A`
+- prepare data into Format A (text1, text2, label)
 - try to increase epochs
 - set gradient_accumulation_steps = n * n_gpus
 
@@ -92,7 +92,9 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=1234 -m a
 --model_name_or_path NousResearch/Llama-2-7b-hf \
 --train_name_or_path SeanLee97/all_nli_angle_format_b \
 --save_dir ckpts/NLI-STS-angle-llama-7b \
---prompt_template 'Summarize sentence "{text}" in one word:"' \
+--query_prompt 'Summarize sentence "{text}" in one word:"' \
+--is_llm 1 \
+--apply_lora 1 \
 --w2 35 --learning_rate 1e-4 --maxlen 50 \
 --lora_r 32 --lora_alpha 32 --lora_dropout 0.1 \
 --save_steps 500 --batch_size 120 --seed 42 --do_eval 0 --load_kbit 4 --gradient_accumulation_steps 4 --epochs 1

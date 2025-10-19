@@ -1,16 +1,14 @@
-# -*- coding: utf-8 -*-
-
 from typing import List
 
 import numpy as np
 from boltons.iterutils import chunked_iter
-from tqdm import tqdm
+from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics.pairwise import (
     paired_cosine_distances,
     paired_euclidean_distances,
-    paired_manhattan_distances
+    paired_manhattan_distances,
 )
-from scipy.stats import pearsonr, spearmanr
+from tqdm import tqdm
 
 from .base import AngleBase
 
@@ -57,7 +55,7 @@ class CorrelationEvaluator(object):
         cosine_labels = 1 - (paired_cosine_distances(embeddings1, embeddings2))
         manhattan_distances = -paired_manhattan_distances(embeddings1, embeddings2)
         euclidean_distances = -paired_euclidean_distances(embeddings1, embeddings2)
-        dot_products = [np.dot(emb1, emb2) for emb1, emb2 in zip(embeddings1, embeddings2)]
+        dot_products = [np.dot(emb1, emb2) for emb1, emb2 in zip(embeddings1, embeddings2, strict=False)]
 
         pearson_cosine, _ = pearsonr(self.labels, cosine_labels)
         spearman_cosine, _ = spearmanr(self.labels, cosine_labels)

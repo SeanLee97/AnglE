@@ -1,41 +1,89 @@
 👨‍🏫 Tutorial
 ============================
 
+A complete walkthrough: Train powerful sentence embeddings for medical text.
 
-4-steps to train a powerful pubmed sentence embeddings.
-------------------------------------------------------------
+This tutorial demonstrates how to train domain-specific sentence embeddings using PubMed data with the AnglE framework. You'll learn data preparation, model training, evaluation, and practical application.
 
-This tutorial will guide you through the process of training powerful sentence embeddings using PubMed data with the AnglE framework. It covers data preparation, model training, evaluation, and application.
+----
 
+📋 Overview
+----------------------------------
 
-Step 1: Data preparation
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+In this tutorial, you will:
 
+1. 📦 Prepare a medical text dataset from PubMed
+2. 🚂 Train a sentence embedding model
+3. 📊 Evaluate the model performance
+4. 🔧 Apply the model in practice
 
-Clean pubmed data from the `qiaojin/PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA>`_ dataset, and prepare it into AnglE's `DatasetFormats.C <https://angle.readthedocs.io/en/latest/notes/training.html#data-prepration>`_ format.
+**Expected Time:** 2-4 hours (depending on hardware)
 
-We have already processed the data and made it available on HuggingFace: `WhereIsAI/medical-triples <https://huggingface.co/datasets/WhereIsAI/medical-triples/viewer/all_pubmed_en_v1>`_. You can use this processed dataset for this tutorial.
+**Prerequisites:** 
+- Python 3.7+
+- CUDA-compatible GPU(s)
+- Basic knowledge of PyTorch and HuggingFace
 
+----
 
-Step 2: Train the model with `angle-trainer`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Step 1: Data Preparation
+====================================
 
+📥 Dataset Selection
+----------------------------------
 
-To train AnglE embeddings, you need to install the `angle-emb` python library, as follows:
+We'll use the `PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA>`_ dataset for training.
+
+**Pre-processed Dataset Available:**
+
+For convenience, we've already processed the data into AnglE's **Format C** (query, positive, negative) and made it available on HuggingFace:
+
+📦 `WhereIsAI/medical-triples <https://huggingface.co/datasets/WhereIsAI/medical-triples/viewer/all_pubmed_en_v1>`_
+
+.. note::
+   Format C is ideal for contrastive learning with hard negatives. See :doc:`training` for more format options.
+
+----
+
+Step 2: Train the Model
+====================================
+
+⬇️ Installation
+----------------------------------
+
+First, install the ``angle-emb`` library:
 
 .. code-block:: bash
 
     python -m pip install -U angle-emb
 
-The `angle-emb` library includes a user-friendly command-line interface called `angle-trainer <https://angle.readthedocs.io/en/latest/notes/training.html#angle-trainer-recommended>`_ for training AnglE embeddings.
+🎯 Training with angle-trainer
+----------------------------------
 
-With `angle-trainer`, you can quickly start model training by specifying the data path and `hyperparameters <https://angle.readthedocs.io/en/latest/notes/training.html#fine-tuning-tips>`_.
+Use the ``angle-trainer`` CLI for streamlined training. You'll need to specify:
 
-Here's an example of training a BERT-base model:
+- Dataset path and hyperparameters
+- Model architecture
+- Training configuration
+
+See :doc:`training` for detailed parameter descriptions.
+
+----
+
+📝 Training Examples
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**Example 1: Train BERT-base Model**
+
+Train a base model suitable for general medical text:
 
 .. code-block:: bash
 
-    WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=1,2,3 torchrun --nproc_per_node=3 --master_port=1234 -m angle_emb.angle_trainer \
+    CUDA_VISIBLE_DEVICES=1,2,3 WANDB_MODE=disabled accelerate launch \
+    --multi_gpu \
+    --num_processes 3 \
+    --main_process_port 1234 \
+    -m angle_emb.angle_trainer \
     --train_name_or_path WhereIsAI/medical-triples \
     --train_subset_name all_pubmed_en_v1 \
     --save_dir ckpts/pubmedbert-medical-base-v1 \
@@ -57,13 +105,28 @@ Here's an example of training a BERT-base model:
     --epochs 1 \
     --fp16 1
 
+**Key Parameters Explained:**
 
-And here's another example of training a BERT-large model:
+- ``--model_name_or_path``: Pre-trained model specialized for biomedical text
+- ``--ibn_w``, ``--cln_w``, ``--angle_w``: Loss weights for Format C
+- ``--maxlen 75``: Sequence length optimized for PubMed abstracts
+- ``--push_to_hub 1``: Automatically upload to HuggingFace Hub
+
+----
+
+**Example 2: Train BERT-large Model**
+
+Train a larger model for better performance:
 
 .. code-block:: bash
 
-    WANDB_MODE=disabled CUDA_VISIBLE_DEVICES=1,2,3 torchrun --nproc_per_node=3 --master_port=1234 -m angle_emb.angle_trainer \
+    CUDA_VISIBLE_DEVICES=1,2,3 WANDB_MODE=disabled accelerate launch \
+    --multi_gpu \
+    --num_processes 3 \
+    --main_process_port 1234 \
+    -m angle_emb.angle_trainer \
     --train_name_or_path WhereIsAI/medical-triples \
+    --column_rename_mapping "text:query" \
     --train_subset_name all_pubmed_en_v1 \
     --save_dir ckpts/uae-medical-large-v1 \
     --model_name_or_path WhereIsAI/UAE-Large-V1 \
@@ -79,21 +142,36 @@ And here's another example of training a BERT-large model:
     --warmup_steps 50 \
     --batch_size 32 \
     --seed 42 \
-    --gradient_accumulation_steps 3 \
+    --gradient_accumulation_steps 2 \
     --push_to_hub 1 --hub_model_id pubmed-angle-large-en --hub_private_repo 1 \
     --epochs 1 \
     --fp16 1
 
+.. tip::
+   Fine-tuning from a general-purpose model (like UAE-Large-V1) often yields better results than training from scratch.
 
-Step 3: Evaluate the model
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+----
 
-AnglE provides a `CorrelationEvaluator <https://angle.readthedocs.io/en/latest/notes/evaluation.html#spearman-and-pearson-correlation>`_ to evaluate the performance of sentence embeddings.
+Step 3: Evaluate the Model
+====================================
 
-For convenience, we have processed the `PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA/viewer/pqa_labeled>`_ pqa_labeled subset data into the `DatasetFormats.A` format and made it available in `WhereIsAI/pubmedqa-test-angle-format-a <https://huggingface.co/datasets/WhereIsAI/pubmedqa-test-angle-format-a>`_ for evaluation purposes.
+📊 Evaluation Setup
+----------------------------------
 
-The following code shows how to evaluate the trained `pubmed-angle-base-en` model:
+AnglE provides a ``CorrelationEvaluator`` to measure embedding quality using Spearman's correlation.
 
+**Evaluation Dataset:**
+
+We've prepared the `PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA/viewer/pqa_labeled>`_ test set in **Format A** (text1, text2, label):
+
+📦 `WhereIsAI/pubmedqa-test-angle-format-a <https://huggingface.co/datasets/WhereIsAI/pubmedqa-test-angle-format-a>`_
+
+----
+
+📈 Evaluation Code
+----------------------------------
+
+Evaluate your trained model:
 
 .. code-block:: python
 
@@ -103,11 +181,16 @@ The following code shows how to evaluate the trained `pubmed-angle-base-en` mode
     from angle_emb import AnglE, CorrelationEvaluator
     from datasets import load_dataset
 
+    # Load trained model
+    angle = AnglE.from_pretrained(
+        'WhereIsAI/pubmed-angle-base-en',
+        pooling_strategy='cls'
+    ).cuda()
 
-    angle = AnglE.from_pretrained('WhereIsAI/pubmed-angle-base-en', pooling_strategy='cls').cuda()
-
+    # Load evaluation dataset
     ds = load_dataset('WhereIsAI/pubmedqa-test-angle-format-a', split='train')
 
+    # Evaluate
     metric = CorrelationEvaluator(
         text1=ds['text1'],
         text2=ds['text2'],
@@ -116,51 +199,117 @@ The following code shows how to evaluate the trained `pubmed-angle-base-en` mode
 
     print(metric)
 
+----
 
-Here, we compare the performance of the trained models with two popular models trained on PubMed data. The results are as follows:
+📊 Benchmark Results
+----------------------------------
 
+Comparison of models trained on PubMed data:
 
-+----------------------------------------+-------------------------+
-| Model                                  | Spearman's Correlation  |
-+========================================+=========================+
-| tavakolih/all-MiniLM-L6-v2-pubmed-full | 84.56                   |
-+----------------------------------------+-------------------------+
-| NeuML/pubmedbert-base-embeddings       | 84.88                   |
-+----------------------------------------+-------------------------+
-| WhereIsAI/pubmed-angle-base-en         | 86.01                   |
-+----------------------------------------+-------------------------+
-| WhereIsAI/pubmed-angle-large-en        | **86.21**               |
-+----------------------------------------+-------------------------+
++------------------------------------------+----------------------------+
+| Model                                    | Spearman's Correlation     |
++==========================================+============================+
+| tavakolih/all-MiniLM-L6-v2-pubmed-full   | 84.56                      |
++------------------------------------------+----------------------------+
+| NeuML/pubmedbert-base-embeddings         | 84.88                      |
++------------------------------------------+----------------------------+
+| WhereIsAI/pubmed-angle-base-en           | 86.01                      |
++------------------------------------------+----------------------------+
+| **WhereIsAI/pubmed-angle-large-en**      | **86.21** 🏆               |
++------------------------------------------+----------------------------+
 
+.. note::
+   The AnglE-trained models outperform existing popular models, with the large variant achieving the highest correlation of **86.21**.
 
-The results show that the trained models, `WhereIsAI/pubmed-angle-base-en` and `WhereIsAI/pubmed-angle-large-en`, performs better than other popular models on the PubMedQA dataset.
-The large one achieves the highest Spearman's correlation of **86.21**.
+----
 
+Step 4: Use the Model
+====================================
 
-Step 4: Use the model in your application
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+🔧 Practical Application
+----------------------------------
 
-By using `angle-emb`, you can quickly load the model for your applications.
+Load and use your trained model for semantic similarity tasks:
 
 .. code-block:: python
 
     from angle_emb import AnglE
     from angle_emb.utils import cosine_similarity
 
-    angle = AnglE.from_pretrained('WhereIsAI/pubmed-angle-base-en', pooling_strategy='cls').cuda()
+    # Load model
+    angle = AnglE.from_pretrained(
+        'WhereIsAI/pubmed-angle-base-en',
+        pooling_strategy='cls'
+    ).cuda()
 
+    # Define query and documents
     query = 'How to treat childhood obesity and overweight?'
     docs = [
         query,
-        'The child is overweight. Parents should relieve their children\'s symptoms through physical activity and healthy eating. First, they can let them do some aerobic exercise, such as jogging, climbing, swimming, etc. In terms of diet, children should eat more cucumbers, carrots, spinach, etc. Parents should also discourage their children from eating fried foods and dried fruits, which are high in calories and fat. Parents should not let their children lie in bed without moving after eating. If their children\'s condition is serious during the treatment of childhood obesity, parents should go to the hospital for treatment under the guidance of a doctor in a timely manner.',
-        'If you want to treat tonsillitis better, you can choose some anti-inflammatory drugs under the guidance of a doctor, or use local drugs, such as washing the tonsil crypts, injecting drugs into the tonsils, etc. If your child has a sore throat, you can also give him or her some pain relievers. If your child has a fever, you can give him or her antipyretics. If the condition is serious, seek medical attention as soon as possible. If the medication does not have a good effect and the symptoms recur, the author suggests surgical treatment. Parents should also make sure to keep their children warm to prevent them from catching a cold and getting tonsillitis again.',
+        'The child is overweight. Parents should relieve their children\'s '
+        'symptoms through physical activity and healthy eating. First, they '
+        'can let them do some aerobic exercise, such as jogging, climbing, '
+        'swimming, etc. In terms of diet, children should eat more cucumbers, '
+        'carrots, spinach, etc. Parents should also discourage their children '
+        'from eating fried foods and dried fruits, which are high in calories '
+        'and fat. Parents should not let their children lie in bed without '
+        'moving after eating. If their children\'s condition is serious during '
+        'the treatment of childhood obesity, parents should go to the hospital '
+        'for treatment under the guidance of a doctor in a timely manner.',
+        'If you want to treat tonsillitis better, you can choose some '
+        'anti-inflammatory drugs under the guidance of a doctor, or use local '
+        'drugs, such as washing the tonsil crypts, injecting drugs into the '
+        'tonsils, etc. If your child has a sore throat, you can also give him '
+        'or her some pain relievers. If your child has a fever, you can give '
+        'him or her antipyretics. If the condition is serious, seek medical '
+        'attention as soon as possible. If the medication does not have a good '
+        'effect and the symptoms recur, the author suggests surgical treatment. '
+        'Parents should also make sure to keep their children warm to prevent '
+        'them from catching a cold and getting tonsillitis again.',
     ]
 
+    # Encode all texts
     embeddings = angle.encode(docs)
     query_emb = embeddings[0]
 
+    # Calculate similarities
     for doc, emb in zip(docs[1:], embeddings[1:]):
-        print(cosine_similarity(query_emb, emb))
+        similarity = cosine_similarity(query_emb, emb)
+        print(f"Similarity: {similarity:.4f}")
 
-    # 0.8029839020052982
-    # 0.4260630076818197
+**Output:**
+
+.. code-block:: text
+
+    Similarity: 0.8030  # Highly relevant (obesity treatment)
+    Similarity: 0.4261  # Less relevant (tonsillitis treatment)
+
+.. tip::
+   Higher similarity scores indicate more relevant documents. Use this for search, ranking, or clustering tasks.
+
+----
+
+🎓 Summary
+====================================
+
+Congratulations! You've learned how to:
+
+✅ Prepare domain-specific datasets for sentence embedding training
+
+✅ Train BERT-based models using the ``angle-trainer`` CLI
+
+✅ Evaluate model performance with correlation metrics
+
+✅ Apply trained models for semantic similarity tasks
+
+----
+
+📚 Next Steps
+----------------------------------
+
+- Explore :doc:`training` for advanced configuration options
+- Learn about different :doc:`evaluation` methods
+- Check out :doc:`pretrained_models` for ready-to-use models
+- Return to :doc:`quickstart` for basic inference examples
+
+**Questions?** See :doc:`citation` for how to cite this work in your research.

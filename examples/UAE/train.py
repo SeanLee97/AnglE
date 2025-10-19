@@ -7,7 +7,7 @@ import random
 import numpy as np
 import torch
 from datasets import load_dataset
-from angle_emb import AnglE, AngleDataTokenizer
+from angle_emb import AnglE
 
 
 parser = argparse.ArgumentParser()
@@ -90,7 +90,7 @@ else:
     ds = load_dataset(args.train_name_or_path, args.train_subset_name)
 
 print(ds)
-train_ds = ds['train'].shuffle(args.dataset_seed).map(AngleDataTokenizer(model.tokenizer, model.max_length, prompt_template=args.prompt), num_proc=args.workers)
+train_ds = ds['train'].shuffle(args.dataset_seed)
 
 
 argument_kwargs = {}
@@ -110,6 +110,7 @@ model.fit(
     warmup_steps=args.warmup_steps,
     logging_steps=args.logging_steps,
     gradient_accumulation_steps=args.gradient_accumulation_steps,
+    text_prompt=args.prompt if args.prompt else None,
     loss_kwargs={
         'w1': args.w1,
         'w2': args.w2,

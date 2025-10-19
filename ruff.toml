@@ -1,0 +1,11 @@
+target-version = "py312"
+exclude = [
+  "tests",
+  "examples"
+]
+
+[lint]
+extend-select = ["I", "B"]
+
+[lint.per-file-ignores]
+"__init__.py" = ["F403", "F405"]

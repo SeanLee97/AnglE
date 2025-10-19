@@ -1,0 +1,24 @@
+CUDA_VISIBLE_DEVICES=0,1,2,3 WANDB_MODE=disabled accelerate launch \
+--multi_gpu \
+--num_processes 4 \
+--main_process_port 2345 \
+--config_file ../FSDP/fsdp_config.yaml \
+-m angle_emb.angle_trainer \
+--gradient_checkpointing 1 \
+--use_reentrant 0 \
+--model_name_or_path WhereIsAI/UAE-Large-V1 \
+--train_name_or_path SeanLee97/nli_for_simcse \
+--save_dir ckpts/use-fsdp-nli \
+--column_rename_mapping "text:query" \
+--query_prompt "query: {text}" \
+--doc_prompt "doc: {text}" \
+--learning_rate 1e-5 \
+--pooling_strategy cls \
+--epochs 1 \
+--batch_size 128 \
+--logging_steps 10 \
+--gradient_accumulation_steps 2 \
+--ibn_w 1.0 \
+--cln_w 1.0 \
+--angle_w 0.02 \
+--fp16 1
