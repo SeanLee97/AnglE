@@ -27,10 +27,10 @@ In this tutorial, you will:
 ----
 
 Step 1: Data Preparation
-=========================================================
+----------------------------------
 
 📥 Dataset Selection
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 We'll use the `PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA>`_ dataset for training.
 
@@ -46,10 +46,10 @@ For convenience, we've already processed the data into AnglE's **Format C** (que
 ----
 
 Step 2: Train the Model
-=========================================================
+----------------------------------
 
 ⬇️ Installation
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 First, install the ``angle-emb`` library:
 
@@ -58,7 +58,7 @@ First, install the ``angle-emb`` library:
     python -m pip install -U angle-emb
 
 🎯 Training with angle-trainer
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Use the ``angle-trainer`` CLI for streamlined training. You'll need to specify:
 
@@ -68,10 +68,7 @@ Use the ``angle-trainer`` CLI for streamlined training. You'll need to specify:
 
 See :doc:`training` for detailed parameter descriptions.
 
-----
-
-📝 Training Examples
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+**📝 Training Examples:**
 
 **Example 1: Train BERT-base Model**
 
@@ -153,10 +150,10 @@ Train a larger model for better performance:
 ----
 
 Step 3: Evaluate the Model
-=========================================================
+----------------------------------
 
 📊 Evaluation Setup
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 AnglE provides a ``CorrelationEvaluator`` to measure embedding quality using Spearman's correlation.
 
@@ -166,10 +163,8 @@ We've prepared the `PubMedQA <https://huggingface.co/datasets/qiaojin/PubMedQA/v
 
 📦 `WhereIsAI/pubmedqa-test-angle-format-a <https://huggingface.co/datasets/WhereIsAI/pubmedqa-test-angle-format-a>`_
 
-----
-
 📈 Evaluation Code
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Evaluate your trained model:
 
@@ -199,10 +194,8 @@ Evaluate your trained model:
 
     print(metric)
 
-----
-
 📊 Benchmark Results
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Comparison of models trained on PubMed data:
 
@@ -224,10 +217,10 @@ Comparison of models trained on PubMed data:
 ----
 
 Step 4: Use the Model
-====================================
+----------------------------------
 
 🔧 Practical Application
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Load and use your trained model for semantic similarity tasks:
 
@@ -290,7 +283,7 @@ Load and use your trained model for semantic similarity tasks:
 ----
 
 🎓 Summary
-=========================================================
+----------------------------------
 
 Congratulations! You've learned how to:
 
@@ -302,10 +295,8 @@ Congratulations! You've learned how to:
 
 ✅ Apply trained models for semantic similarity tasks
 
-----
-
 📚 Next Steps
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - Explore :doc:`training` for advanced configuration options
 - Learn about different :doc:`evaluation` methods
