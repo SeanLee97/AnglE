@@ -27,7 +27,7 @@ In this tutorial, you will:
 ----
 
 Step 1: Data Preparation
-====================================
+=========================================================
 
 📥 Dataset Selection
 ----------------------------------
@@ -46,7 +46,7 @@ For convenience, we've already processed the data into AnglE's **Format C** (que
 ----
 
 Step 2: Train the Model
-====================================
+=========================================================
 
 ⬇️ Installation
 ----------------------------------
@@ -153,7 +153,7 @@ Train a larger model for better performance:
 ----
 
 Step 3: Evaluate the Model
-====================================
+=========================================================
 
 📊 Evaluation Setup
 ----------------------------------
@@ -290,7 +290,7 @@ Load and use your trained model for semantic similarity tasks:
 ----
 
 🎓 Summary
-====================================
+=========================================================
 
 Congratulations! You've learned how to:
 
