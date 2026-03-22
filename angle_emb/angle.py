@@ -1072,6 +1072,23 @@ class AnglE(AngleBase):
         if bf16 is None:
             bf16 = False
 
+        # PyTorch's GradScaler (used for fp16 training) cannot unscale gradients when the
+        # model parameters are already stored in float16. The standard fix is to promote the
+        # model to float32 first: GradScaler then works correctly with float32 master weights
+        # and float16 activations. Training a float16-weight model without GradScaler
+        # (i.e. just disabling fp16) is numerically unstable due to float16 precision limits
+        # in the Adam moment accumulators.
+        if fp16:
+            backbone_dtype = next(self.backbone.parameters()).dtype
+            if backbone_dtype == torch.float16:
+                logger.warning(
+                    'Model parameters are in float16 but fp16 training requires float32 '
+                    'master weights. Casting backbone to float32 so that the GradScaler '
+                    'can operate correctly (float32 params, float16 activations). '
+                    'If memory is a concern, consider using bf16=True instead.'
+                )
+                self.backbone = self.backbone.float()
+
         # init argument_kwargs
         if argument_kwargs is None:
             argument_kwargs = {}
@@ -1113,7 +1130,7 @@ class AnglE(AngleBase):
             train_dataset=train_ds,
             eval_dataset=valid_ds,
             loss_kwargs=loss_kwargs,
-            tokenizer=self.tokenizer,
+            processing_class=self.tokenizer,
             args=TrainingArguments(
                 per_device_train_batch_size=batch_size,
                 gradient_accumulation_steps=gradient_accumulation_steps,
